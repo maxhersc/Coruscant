@@ -92,7 +92,7 @@ const FRAG = /* glsl */ `
     vec3 col;
     if (vPart < 0.5) {
       vec3 n = normalize(vN);
-      vec3 light = uAmbient * (0.6 + 0.4 * n.y) + uSunColor * max(dot(n, uSunDir), 0.0) * 0.8;
+      vec3 light = uAmbient * (0.6 + 0.4 * n.y) + uSunColor * max(dot(n, uSunDir), 0.0) * 0.45;
       col = paint(vColor) * light;
     } else if (vPart < 1.5) {
       col = vec3(4.0, 3.6, 3.0) * (0.5 + uNight);

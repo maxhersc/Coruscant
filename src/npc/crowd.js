@@ -8,6 +8,7 @@ import { stdMat, glowMat } from '../world/env.js';
 // pairs, and stop to talk to you. Rendered as instanced meshes.
 
 const CLOTH = [0x6b2b2b, 0x2b3f5c, 0x4a4a4a, 0x7a6a4a, 0x2f4f3a, 0x5a2f5f, 0x8a8278, 0x1e1e24, 0x9a5a2a, 0x3a6a7a, 0xb0a890, 0x6a1a3a];
+const PANTS = [0x2a2a30, 0x3a3226, 0x1e2a3a, 0x4a4a4a, 0x2f2a24, 0x5a4a3a];
 const SKIN = [0xf0c8a0, 0xd8a47c, 0xb57a52, 0x8a5636, 0x5c3a24, 0x7aa0c8, 0x6aa070, 0xa86a9a, 0x9a9aa4, 0xc8704a, 0x4a8a8a];
 
 const LINES = [
@@ -83,8 +84,13 @@ export function createCrowd(zones) {
         scale: droid ? rng.range(0.8, 1.0) : rng.range(0.88, 1.14),
         width: rng.range(0.9, 1.15),
         droid,
+        robe: rng.chance(0.3),
         cloth: rng.pick(CLOTH),
+        pants: rng.pick(PANTS),
         skin: rng.pick(SKIN),
+        // Head shape: [x, y, z] scale. Some species have long skulls, some broad.
+        head: rng.pick([[1, 1, 1], [1, 1, 1], [1, 1, 1], [0.9, 1.35, 1.0], [1.2, 0.9, 1.1], [0.85, 1.15, 1.2]]),
+        tails: rng.chance(0.1),
         phase: rng.range(0, 10),
         talkTimer: 0,
         line: droid ? rng.pick(DROID_LINES) : rng.pick(LINES),
@@ -92,65 +98,120 @@ export function createCrowd(zones) {
     }
   }
 
-  // Geometry: a robed body and a head for people; a squat droid shell.
-  const robe = new THREE.CylinderGeometry(0.2, 0.3, 0.95, 10).translate(0, 0.475, 0);
-  const chest = new THREE.CapsuleGeometry(0.21, 0.42, 4, 10).translate(0, 1.2, 0);
-  const shoulders = new THREE.BoxGeometry(0.56, 0.12, 0.26).translate(0, 1.46, 0);
-  const bodyGeo = mergeGeometries([robe.toNonIndexed(), chest.toNonIndexed(), shoulders.toNonIndexed()]);
-  const headGeo = new THREE.SphereGeometry(0.14, 12, 10).translate(0, 1.7, 0);
+  // People: a torso (coat or robe), a head, two legs and two arms, each an
+  // instanced mesh so limbs can swing. Droids are a single shell.
+  const nonIdx = (g) => (g.index ? g.toNonIndexed() : g);
+  const coatGeo = mergeGeometries([
+    new THREE.CapsuleGeometry(0.2, 0.36, 4, 10).translate(0, 1.22, 0),
+    new THREE.CylinderGeometry(0.21, 0.27, 0.42, 10).translate(0, 0.86, 0),
+    new THREE.BoxGeometry(0.5, 0.11, 0.24).translate(0, 1.46, 0),
+  ].map(nonIdx));
+  const robeGeo = mergeGeometries([
+    new THREE.CapsuleGeometry(0.2, 0.36, 4, 10).translate(0, 1.22, 0),
+    new THREE.CylinderGeometry(0.2, 0.34, 1.05, 12).translate(0, 0.55, 0),
+    new THREE.BoxGeometry(0.5, 0.11, 0.24).translate(0, 1.46, 0),
+  ].map(nonIdx));
+  const headGeo = new THREE.SphereGeometry(0.135, 12, 10);
+  const legGeo = new THREE.CapsuleGeometry(0.075, 0.68, 4, 8).translate(0, -0.42, 0);
+  const armGeo = new THREE.CapsuleGeometry(0.06, 0.5, 4, 8).translate(0, -0.3, 0);
+  const tailGeo = mergeGeometries([
+    new THREE.CapsuleGeometry(0.05, 0.5, 4, 6).translate(-0.07, -0.25, 0),
+    new THREE.CapsuleGeometry(0.05, 0.42, 4, 6).translate(0.07, -0.21, 0),
+  ].map(nonIdx));
   const droidGeo = mergeGeometries([
-    new THREE.CylinderGeometry(0.26, 0.3, 0.9, 12).translate(0, 0.55, 0).toNonIndexed(),
-    new THREE.SphereGeometry(0.26, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2).translate(0, 1.0, 0).toNonIndexed(),
-    new THREE.BoxGeometry(0.12, 0.1, 0.5).translate(-0.3, 0.2, 0).toNonIndexed(),
-    new THREE.BoxGeometry(0.12, 0.1, 0.5).translate(0.3, 0.2, 0).toNonIndexed(),
-  ]);
+    new THREE.CylinderGeometry(0.26, 0.3, 0.9, 12).translate(0, 0.55, 0),
+    new THREE.SphereGeometry(0.26, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2).translate(0, 1.0, 0),
+    new THREE.BoxGeometry(0.12, 0.1, 0.5).translate(-0.3, 0.2, 0),
+    new THREE.BoxGeometry(0.12, 0.1, 0.5).translate(0.3, 0.2, 0),
+  ].map(nonIdx));
   const eyeGeo = new THREE.SphereGeometry(0.06, 8, 6).translate(0, 1.08, 0.22);
 
   const people = npcs.filter((n) => !n.droid);
   const droids = npcs.filter((n) => n.droid);
-  const bodyMesh = new THREE.InstancedMesh(bodyGeo, stdMat(0xffffff, { roughness: 0.85, metalness: 0.05 }), people.length);
-  const headMesh = new THREE.InstancedMesh(headGeo, stdMat(0xffffff, { roughness: 0.7, metalness: 0 }), people.length);
-  const droidMesh = new THREE.InstancedMesh(droidGeo, stdMat(0xffffff, { roughness: 0.3, metalness: 0.8 }), Math.max(droids.length, 1));
-  const eyeMesh = new THREE.InstancedMesh(eyeGeo, glowMat(0xff5533, 3), Math.max(droids.length, 1));
+  const coats = people.filter((n) => !n.robe), robes = people.filter((n) => n.robe);
+  const tailed = people.filter((n) => n.tails);
+  const clothMat = stdMat(0xffffff, { roughness: 0.85, metalness: 0.05 });
+  const skinMat = stdMat(0xffffff, { roughness: 0.7, metalness: 0 });
+  const IM = (geo, m, n) => {
+    const mesh = new THREE.InstancedMesh(geo, m, Math.max(n, 1));
+    mesh.count = n;
+    mesh.frustumCulled = false;
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    return mesh;
+  };
+  const coatMesh = IM(coatGeo, clothMat, coats.length);
+  const robeMesh = IM(robeGeo, clothMat, robes.length);
+  const headMesh = IM(headGeo, skinMat, people.length);
+  const legMesh = IM(legGeo, clothMat, coats.length * 2);
+  const armMesh = IM(armGeo, clothMat, people.length * 2);
+  const tailMesh = IM(tailGeo, skinMat, tailed.length);
+  const droidMesh = IM(droidGeo, stdMat(0xffffff, { roughness: 0.3, metalness: 0.8 }), droids.length);
+  const eyeMesh = IM(eyeGeo, glowMat(0xff5533, 3), droids.length);
   const c = new THREE.Color();
+  coats.forEach((n, i) => {
+    n.torso = coatMesh; n.torsoIdx = i; n.legIdx = i * 2;
+    coatMesh.setColorAt(i, c.set(n.cloth));
+    legMesh.setColorAt(i * 2, c.set(n.pants));
+    legMesh.setColorAt(i * 2 + 1, c);
+  });
+  robes.forEach((n, i) => { n.torso = robeMesh; n.torsoIdx = i; n.legIdx = -1; robeMesh.setColorAt(i, c.set(n.cloth)); });
   people.forEach((n, i) => {
     n.index = i;
-    bodyMesh.setColorAt(i, c.set(n.cloth));
     headMesh.setColorAt(i, c.set(n.skin));
+    armMesh.setColorAt(i * 2, c.set(n.cloth).multiplyScalar(0.85));
+    armMesh.setColorAt(i * 2 + 1, c);
   });
+  tailed.forEach((n, i) => { n.tailIdx = i; tailMesh.setColorAt(i, c.set(n.skin)); });
   const DROID_COL = [0xc0c4c8, 0xd8b048, 0x8a9aa8, 0xe8e8e0, 0x6a7078, 0xb04a3a];
   droids.forEach((n, i) => {
     n.index = i;
     droidMesh.setColorAt(i, c.set(rng.pick(DROID_COL)));
   });
-  for (const m of [bodyMesh, headMesh, droidMesh, eyeMesh]) {
-    m.frustumCulled = false;
-    m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-  }
+  const meshes = [coatMesh, robeMesh, headMesh, legMesh, armMesh, tailMesh, droidMesh, eyeMesh];
   const group = new THREE.Group();
-  group.add(bodyMesh, headMesh, droidMesh, eyeMesh);
+  group.add(...meshes);
 
-  const mat = new THREE.Matrix4();
+  const base = new THREE.Matrix4();
+  const local = new THREE.Matrix4();
+  const out = new THREE.Matrix4();
   const q = new THREE.Quaternion();
   const e = new THREE.Euler();
   const s = new THREE.Vector3();
   const p = new THREE.Vector3();
+  const part = (mesh, idx, x, y, z, rx, rz, sx = 1, sy = 1, sz = 1) => {
+    e.set(rx, 0, rz);
+    q.setFromEuler(e);
+    p.set(x, y, z);
+    s.set(sx, sy, sz);
+    local.compose(p, q, s);
+    out.multiplyMatrices(base, local);
+    mesh.setMatrixAt(idx, out);
+  };
   const writeMatrix = (n) => {
     const moving = n.state === 'walk';
-    const bob = moving ? Math.abs(Math.sin(n.phase * 2)) * 0.05 : 0;
-    e.set(0, n.heading, moving ? Math.sin(n.phase) * 0.04 : 0);
+    const bob = moving ? Math.abs(Math.sin(n.phase)) * 0.04 : 0;
+    e.set(0, n.heading, 0);
     q.setFromEuler(e);
     s.set(n.scale * n.width, n.scale, n.scale * n.width);
     p.copy(n.pos);
     p.y += bob;
-    mat.compose(p, q, s);
+    base.compose(p, q, s);
     if (n.droid) {
-      droidMesh.setMatrixAt(n.index, mat);
-      eyeMesh.setMatrixAt(n.index, mat);
-    } else {
-      bodyMesh.setMatrixAt(n.index, mat);
-      headMesh.setMatrixAt(n.index, mat);
+      droidMesh.setMatrixAt(n.index, base);
+      eyeMesh.setMatrixAt(n.index, base);
+      return;
     }
+    const swing = moving ? Math.sin(n.phase) * 0.55 : 0;
+    n.torso.setMatrixAt(n.torsoIdx, base);
+    const [hx, hy, hz] = n.head;
+    part(headMesh, n.index, 0, 1.66 + (hy - 1) * 0.07, 0, 0, 0, hx, hy, hz);
+    if (n.legIdx >= 0) {
+      part(legMesh, n.legIdx, -0.1, 0.86, 0, swing, 0);
+      part(legMesh, n.legIdx + 1, 0.1, 0.86, 0, -swing, 0);
+    }
+    part(armMesh, n.index * 2, -0.27, 1.44, 0, -swing * 0.8, -0.1);
+    part(armMesh, n.index * 2 + 1, 0.27, 1.44, 0, swing * 0.8, 0.1);
+    if (n.tails) part(tailMesh, n.tailIdx, 0, 1.68, -0.1, 0.35, 0);
   };
   npcs.forEach(writeMatrix);
 
@@ -187,7 +248,7 @@ export function createCrowd(zones) {
             n.pos.x = nx;
             n.pos.z = nz;
             n.heading += angleDiff(Math.atan2(dir.x, dir.z), n.heading) * Math.min(1, dt * 6);
-            n.phase += dt * n.speed * 3.2;
+            n.phase += dt * n.speed * 4.8;
           } else {
             n.state = 'idle';
             n.timer = rng.range(0.3, 1.5);
@@ -204,10 +265,7 @@ export function createCrowd(zones) {
       }
       writeMatrix(n);
     }
-    bodyMesh.instanceMatrix.needsUpdate = true;
-    headMesh.instanceMatrix.needsUpdate = true;
-    droidMesh.instanceMatrix.needsUpdate = true;
-    eyeMesh.instanceMatrix.needsUpdate = true;
+    for (const m of meshes) m.instanceMatrix.needsUpdate = true;
   };
 
   const nearest = (p, maxD = 2.4) => {

@@ -31,7 +31,7 @@ vec3 skyColor(vec3 d) {
   vec3 col = mix(uZenith, uHorizon, t);
   // Below the horizon is the city's own haze, lit from underneath.
   float below = clamp(-h * 4.0, 0.0, 1.0);
-  col = mix(col, mix(uHorizon, uGlow, 0.55 + 0.25 * uNight), below);
+  col = mix(col, mix(uHorizon, uGlow, 0.55 + 0.25 * uNight) * 0.72, below);
   float sd = max(dot(d, uSunDir), 0.0);
   col += uSunColor * (pow(sd, 6.0) * 0.28 + pow(sd, 48.0) * 0.5) * (1.0 - uNight * 0.85);
   return col;
@@ -45,7 +45,7 @@ vec3 applyFog(vec3 col, vec3 wp) {
   float density = uFogDensity * (1.0 + 5.0 * low);
   float f = 1.0 - exp(-dist * density);
   vec3 fc = skyColor(dir);
-  fc = mix(fc, uGlow * (0.5 + 0.6 * uNight), low * 0.55);
+  fc = mix(fc, uGlow * (0.38 + 0.6 * uNight), low * 0.7);
   return mix(col, fc, f);
 }
 `;
@@ -92,8 +92,8 @@ const KEYS = [
   { e: -0.18, zen: [0.01, 0.012, 0.04], hor: [0.16, 0.08, 0.12], glow: [0.6, 0.27, 0.12], sun: [0.15, 0.17, 0.28], amb: [0.08, 0.08, 0.13] },
   { e: -0.04, zen: [0.06, 0.06, 0.18], hor: [0.75, 0.3, 0.2], glow: [0.6, 0.3, 0.15], sun: [0.9, 0.35, 0.15], amb: [0.18, 0.14, 0.2] },
   { e: 0.06, zen: [0.14, 0.17, 0.4], hor: [1.15, 0.55, 0.28], glow: [0.6, 0.38, 0.22], sun: [1.6, 0.75, 0.38], amb: [0.32, 0.26, 0.3] },
-  { e: 0.3, zen: [0.2, 0.36, 0.75], hor: [0.85, 0.78, 0.7], glow: [0.6, 0.5, 0.4], sun: [2.2, 2.0, 1.75], amb: [0.45, 0.45, 0.52] },
-  { e: 1.0, zen: [0.16, 0.33, 0.78], hor: [0.75, 0.78, 0.8], glow: [0.55, 0.52, 0.48], sun: [2.6, 2.45, 2.2], amb: [0.5, 0.52, 0.58] },
+  { e: 0.3, zen: [0.18, 0.34, 0.72], hor: [0.66, 0.68, 0.7], glow: [0.5, 0.44, 0.38], sun: [2.0, 1.85, 1.6], amb: [0.42, 0.44, 0.52] },
+  { e: 1.0, zen: [0.14, 0.3, 0.72], hor: [0.58, 0.66, 0.76], glow: [0.46, 0.44, 0.42], sun: [2.3, 2.2, 2.0], amb: [0.46, 0.5, 0.58] },
 ];
 
 function lerpKey(e, field, out) {

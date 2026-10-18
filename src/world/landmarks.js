@@ -20,8 +20,8 @@ export function buildLandmarks(collision, segs, beacons) {
   {
     const l = LANDMARKS[0];
     const x = l.i * CELL, z = l.j * CELL;
-    const stemMat = stdMat(0x8a8780, { roughness: 0.5, metalness: 0.4 });
-    const domeMat = stdMat(0xb8b4aa, { roughness: 0.35, metalness: 0.55 });
+    const stemMat = stdMat(0x8a8780, { roughness: 0.6, metalness: 0.15 });
+    const domeMat = stdMat(0xc8c2b4, { roughness: 0.45, metalness: 0.2 });
     const stem = new THREE.Mesh(new THREE.CylinderGeometry(55, 80, 280, 40), stemMat);
     stem.position.set(x, 140, z);
     group.add(stem);

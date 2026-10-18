@@ -275,6 +275,11 @@ function market(g) {
   const lenderPos = stall(g, -44, L, -76, 0, "VOOL'S CREDIT", MAT.neonMagenta, 10);
   addInteract({ pos: lenderPos, radius: 2.8, label: "Vool's Credit (loans)", action: 'loan' });
   lightStrings(g, L, [[-85, -60, 85, -60, 7], [-85, -20, 85, -20, 7.5], [-85, 20, 85, 20, 7], [44, -85, 44, 85, 8], [-44, -85, -44, 85, 8]]);
+  for (const [x, z] of [[60, 0], [-60, 0], [0, -70]]) {
+    const glow = new THREE.PointLight(0xffb070, 900, 90, 2);
+    glow.position.set(x, L + 9, z);
+    g.add(glow);
+  }
   for (const [x, z] of [[-60, 0], [60, -45], [-60, -50], [50, 50]]) lamp(g, x, L, z);
   sign(g, 'LIFT ▲▼', 0, L + 5, -55.4, 8, 1.4, Math.PI, { fg: '#ffc266' });
   addInteract({ pos: new THREE.Vector3(10, L, -58), radius: 3, label: 'Call the lift', action: 'lift-call', data: { level: 0 } });

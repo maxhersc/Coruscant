@@ -56,6 +56,8 @@ export function initMaterials() {
   MAT.neonWhite = glowMat(0xfff2dd, 3);
   MAT.lampGlow = glowMat(0xffd9a0, 5);
   MAT.railGlow = glowMat(0x33ddff, 1.4);
+  MAT.padGlow = glowMat(0xffaa33, 1.6);
+  MAT.padLight = glowMat(0x55ff88, 2.2);
   MAT.neonCyan.userData.css = '#7feaff';
   MAT.neonAmber.userData.css = '#ffc266';
   MAT.neonMagenta.userData.css = '#ff7ac0';
@@ -338,26 +340,26 @@ export function stall(parent, x, y, z, facing, name, neon, w = 8) {
 export function landingPad(parent, cx, cz, y, size, label) {
   const h = size / 2;
   slab(parent, cx - h, cz - h, cx + h, cz + h, y, MAT.floorDark, 2);
-  const ring = new THREE.Mesh(new THREE.RingGeometry(h * 0.55, h * 0.62, 48), MAT.neonAmber);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(h * 0.56, h * 0.6, 48), MAT.padGlow);
   ring.rotation.x = -Math.PI / 2;
   ring.position.set(cx, y + 0.03, cz);
   parent.add(ring);
   for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
-    const l = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.3, 0.6), MAT.neonGreen);
+    const l = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.25, 0.5), MAT.padLight);
     l.position.set(cx + dx * (h - 0.6), y + 0.15, cz + dz * (h - 0.6));
     parent.add(l);
   }
   const edge = (w, d, px, pz) => {
-    const e = new THREE.Mesh(new THREE.BoxGeometry(w, 0.1, d), MAT.neonAmber);
+    const e = new THREE.Mesh(new THREE.BoxGeometry(w, 0.1, d), MAT.padGlow);
     e.position.set(px, y + 0.02, pz);
     parent.add(e);
   };
-  edge(size, 0.3, cx, cz - h + 0.15);
-  edge(size, 0.3, cx, cz + h - 0.15);
-  edge(0.3, size, cx - h + 0.15, cz);
-  edge(0.3, size, cx + h - 0.15, cz);
+  edge(size, 0.2, cx, cz - h + 0.1);
+  edge(size, 0.2, cx, cz + h - 0.1);
+  edge(0.2, size, cx - h + 0.1, cz);
+  edge(0.2, size, cx + h - 0.1, cz);
   if (label) {
-    const s = sign(parent, label, cx, y + 0.05, cz, size * 0.5, size * 0.12, 0, { fg: '#ffcc66', blur: 4 });
+    const s = sign(parent, label, cx, y + 0.05, cz, size * 0.5, size * 0.12, 0, { fg: '#ffcc66', blur: 4, intensity: 0.9 });
     s.rotation.x = -Math.PI / 2;
   }
 }

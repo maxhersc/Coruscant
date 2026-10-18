@@ -54,13 +54,15 @@ export function createTowerMaterial(isCylinder) {
       }
 
       vec3 baseTint(float t) {
-        vec3 sand = vec3(0.62, 0.56, 0.48);
-        vec3 steel = vec3(0.42, 0.45, 0.5);
-        vec3 dark = vec3(0.16, 0.17, 0.2);
-        vec3 bronze = vec3(0.46, 0.36, 0.28);
-        if (t < 0.33) return mix(sand, steel, t / 0.33);
-        if (t < 0.66) return mix(steel, dark, (t - 0.33) / 0.33);
-        return mix(dark, bronze, (t - 0.66) / 0.34);
+        vec3 sand = vec3(0.74, 0.64, 0.5);
+        vec3 ivory = vec3(0.82, 0.8, 0.75);
+        vec3 steel = vec3(0.48, 0.52, 0.58);
+        vec3 dark = vec3(0.2, 0.21, 0.25);
+        vec3 bronze = vec3(0.58, 0.43, 0.3);
+        if (t < 0.25) return mix(sand, ivory, t / 0.25);
+        if (t < 0.5) return mix(ivory, steel, (t - 0.25) / 0.25);
+        if (t < 0.75) return mix(steel, dark, (t - 0.5) / 0.25);
+        return mix(dark, bronze, (t - 0.75) / 0.25);
       }
 
       vec3 windowColor(float h) {
@@ -84,7 +86,7 @@ export function createTowerMaterial(isCylinder) {
         float sunD = max(dot(n, uSunDir), 0.0);
         // Sky light from above, a little bounce from the city below.
         float skyD = 0.55 + 0.45 * n.y;
-        vec3 light = uAmbient * skyD + uSunColor * sunD * 0.75;
+        vec3 light = uAmbient * skyD * 0.85 + uSunColor * sunD * 0.42;
         // Lower levels sit in shadow and smog.
         float depth = smoothstep(0.0, 260.0, vWp.y);
         light *= mix(0.35, 1.0, depth);
@@ -125,12 +127,25 @@ export function createTowerMaterial(isCylinder) {
           vec3 wall = base * light;
           col = mix(wall, glass, winM);
           float emit = mix(0.03, 1.15, night);
-          col += winM * onM * wc * emit;
+          // Up close a lit window has an interior: brighter ceiling light,
+          // blinds in some, a silhouette in a few.
+          vec2 wl = clamp((f - vec2(0.12, 0.22)) / vec2(0.76, 0.64), 0.0, 1.0);
+          float interior = 0.7 + 0.45 * wl.y;
+          float hb = h21(id * 3.1 + seed * 7.0);
+          if (hb > 0.62) interior *= 0.55 + 0.45 * step(0.45, fract(wl.y * 9.0));
+          if (hb < 0.14) {
+            float cx = 0.3 + hb * 3.0;
+            float body = step(abs(wl.x - cx), 0.09) * step(wl.y, 0.62);
+            float headS = step(length((wl - vec2(cx, 0.72)) * vec2(1.0, 1.6)), 0.08);
+            interior *= 1.0 - 0.8 * max(body, headS);
+          }
+          interior = mix(1.0, interior, detail);
+          col += winM * onM * wc * emit * interior;
 
           if (band > 0.5) {
             float period = 36.0 + floor(seed * 4.0) * 12.0;
             float b = smoothstep(0.0, 0.5, 1.0 - abs(mod(vWp.y, period) - 1.0) / 1.0);
-            col = mix(col, bandColor(band) * (0.3 + 2.2 * night), b * 0.85);
+            col = mix(col, bandColor(band) * (0.25 + 1.3 * night), b * 0.8);
           }
         }
 

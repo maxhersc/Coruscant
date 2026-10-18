@@ -76,5 +76,84 @@ export function createAds(segs) {
       p.mesh.material.opacity = phase < 0.03 ? 0.4 + 0.5 * Math.random() : 0.92;
     }
   };
+  addBanners(group, segs, rng);
   return { group, update };
+}
+
+// Vertical neon banners hung on tower faces near the hub. One instanced mesh
+// per design, so a hundred and fifty banners cost a handful of draw calls.
+const BANNERS = [
+  ['NOODLES', '#ffc266'], ['HOTEL', '#7feaff'], ['CAF', '#ff7ac0'], ['DROIDS', '#8dffad'],
+  ['SPICE', '#ffb347'], ['CLUB 9', '#c78cff'], ['BAR', '#ff4d6d'], ['REPAIR', '#7fa8ff'],
+  ['CANTINA', '#ffd166'], ['HOLO', '#66ffe0'],
+];
+
+function bannerTexture(text, color) {
+  const c = document.createElement('canvas');
+  c.width = 128;
+  c.height = 640;
+  const g = c.getContext('2d');
+  g.fillStyle = 'rgba(8,8,14,0.85)';
+  g.fillRect(0, 0, 128, 640);
+  g.strokeStyle = color;
+  g.lineWidth = 6;
+  g.shadowColor = color;
+  g.shadowBlur = 14;
+  g.strokeRect(8, 8, 112, 624);
+  g.fillStyle = color;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  const chars = [...text.replace(/ /g, '')];
+  const step = Math.min(90, 560 / chars.length);
+  g.font = `700 ${Math.floor(step * 0.8)}px "Arial Narrow", Arial, sans-serif`;
+  chars.forEach((ch, i) => g.fillText(ch, 64, 50 + step * (i + 0.5)));
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+function addBanners(group, segs, rng) {
+  const spots = BANNERS.map(() => []);
+  const cands = segs.filter((s) => s.kind === 'box' && s.sy > 60 && s.style[3] !== 4 && s.sx > 20 && s.sz > 20);
+  for (const s of cands) {
+    const d = Math.hypot(s.x, s.z);
+    if (d < 150 || d > 1100 || !rng.chance(d < 500 ? 0.75 : 0.45)) continue;
+    const y0 = s.y - s.sy / 2, y1 = s.y + s.sy / 2;
+    const count = rng.int(1, 2);
+    for (let k = 0; k < count; k++) {
+      const h = rng.range(22, 46);
+      const lo = Math.max(y0 + h / 2 + 10, 110), hi = Math.min(y1 - h / 2 - 4, 620);
+      if (hi <= lo) continue;
+      const y = rng.range(lo, hi);
+      // Hang it off a corner, sticking out from one face.
+      const sx = rng.chance(0.5) ? 1 : -1, sz = rng.chance(0.5) ? 1 : -1;
+      const alongX = rng.chance(0.5);
+      const w = h * 0.2;
+      const x = s.x + sx * (s.sx / 2 + (alongX ? w / 2 + 0.3 : 0.4));
+      const z = s.z + sz * (s.sz / 2 + (alongX ? 0.4 : w / 2 + 0.3));
+      // Plane faces along the street so it reads from both directions.
+      const rot = alongX ? 0 : Math.PI / 2;
+      spots[rng.int(0, BANNERS.length - 1)].push({ x, y, z, w, h, rot });
+    }
+  }
+  const geo = new THREE.PlaneGeometry(1, 1);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), sc = new THREE.Vector3();
+  const up = new THREE.Vector3(0, 1, 0);
+  BANNERS.forEach(([text, color], i) => {
+    const list = spots[i];
+    if (!list.length) return;
+    const mat = patchFog(new THREE.MeshBasicMaterial({
+      map: bannerTexture(text, color),
+      color: new THREE.Color(2.2, 2.2, 2.2),
+      side: THREE.DoubleSide,
+    }));
+    const mesh = new THREE.InstancedMesh(geo, mat, list.length);
+    list.forEach((b, k) => {
+      q.setFromAxisAngle(up, b.rot);
+      m.compose(p.set(b.x, b.y, b.z), q, sc.set(b.w, b.h, 1));
+      mesh.setMatrixAt(k, m);
+    });
+    mesh.frustumCulled = false;
+    group.add(mesh);
+  });
 }
