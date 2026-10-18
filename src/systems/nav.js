@@ -4,6 +4,7 @@ import { decks, pads } from './interact.js';
 import { LANDMARKS } from '../world/landmarks.js';
 import { state } from './state.js';
 import { jobTarget } from './jobs.js';
+import { placeOf } from './places.js';
 
 // Wayfinding: the places you can be guided to, the one you picked, and the
 // next step toward it (take the lift, go to your speeder, land at a pad).
@@ -38,7 +39,7 @@ export function buildPlaces(speeder, extra = []) {
     { name: 'Skydeck', pos: V(0, LEVELS.skydeck, -76), level: LEVELS.skydeck, hint: 'The best view in the city' },
   ].map((p) => ({ ...p, group: 'Spire hub' }));
   const you = [{ name: 'Your speeder', get pos() { return speeder.pos; }, group: 'You', hint: 'Press F beside it to fly, or V to have it brought to you', dynamic: true }];
-  const deckPlaces = decks.map((d) => ({ name: d.name, pos: d.dropPos, group: 'Rooftop decks', hint: 'Land on the pad, walk to the terminal' }));
+  const deckPlaces = decks.map((d) => { const p = placeOf(d.name); return { name: d.name, pos: d.dropPos, group: 'Rooftop decks', hint: `${p.venue} · ${p.label}` }; });
   const sights = LANDMARKS.map((l) => ({ name: l.name, pos: V(l.i * CELL, 320, l.j * CELL), group: 'Landmarks', hint: 'Fly past it', sight: true }));
   return [...hub, ...you, ...extra, ...deckPlaces, ...sights];
 }

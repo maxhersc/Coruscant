@@ -139,12 +139,14 @@ export class Speeder {
     const boost = key('ShiftLeft') || key('ShiftRight');
     // bonus: top speed added by installed turbo injectors.
     const bonus = this.bonus || 0;
-    const max = (boost ? s.boost : s.maxSpeed) + bonus;
-    if (key('KeyW')) this.speed += (max - this.speed) * Math.min(1, dt * s.accel * (boost ? 0.7 : 0.6));
+    // load: heavy freight in the hold cuts top speed and acceleration.
+    const load = this.load || 1;
+    const max = ((boost ? s.boost : s.maxSpeed) + bonus) * load;
+    if (key('KeyW')) this.speed += (max - this.speed) * Math.min(1, dt * s.accel * load * (boost ? 0.7 : 0.6));
     else if (key('KeyS')) this.speed -= (this.speed > 0 ? 60 : 12) * dt;
     else this.speed -= this.speed * Math.min(1, dt * 0.35);
     if (!key('KeyW') && this.speed > max) this.speed -= (this.speed - max) * Math.min(1, dt * 2);
-    this.speed = THREE.MathUtils.clamp(this.speed, -18, s.boost + bonus);
+    this.speed = THREE.MathUtils.clamp(this.speed, -18, (s.boost + bonus) * load);
 
     let strafe = 0, lift = 0;
     if (key('KeyA')) strafe += 1;

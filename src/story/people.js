@@ -4,6 +4,7 @@ import { createHumanoid } from '../npc/character.js';
 import { addInteract, decks } from '../systems/interact.js';
 import { state, addCredits } from '../systems/state.js';
 import { converse } from './dialogue.js';
+import { deliversAt, FIXER } from '../systems/jobs.js';
 import { where, isAt, reached, advance, flag, startFavor, finishFavor, favorState, BRASK_RECORD } from './story.js';
 
 // Named people of the city. Each stands somewhere fixed, faces the player
@@ -253,6 +254,20 @@ function cast(ctx) {
       },
     },
     {
+      id: 'sable', name: 'Sable', title: 'Fixer, Undercity Shelf',
+      look: { cloth: 0x2a1a30, accent: 0xff3355, skin: 0x9a6a50, coat: true, hat: 'hood' },
+      pos: null, facing: -Math.PI / 2,
+      news: () => deliversAt(FIXER.name),
+      talk: () => {
+        const work = { label: 'Show me the work.', run: () => { ctx.openFixer(); return false; } };
+        if (deliversAt(FIXER.name)) return { start: { text: 'There you are. Put it down there, slowly. Anybody follow you?', choices: [{ label: 'Hand it over.', run: () => { ctx.openFixer(); return false; } }] } };
+        return {
+          start: { text: "Name's Sable. I move things that would rather not be seen. The pay is good. Spire Security pays attention.", choices: [work, { label: 'How do I not get caught?', next: 'tips' }, { label: 'Not today.' }] },
+          tips: { text: 'Patrols scan anything that flies close. Give them room, and never race past one. If they light you up, run: boost, put towers between you, or drop under the clouds. They hate the clouds. Embassies scan the air round their decks, so those runs pay more. And the stall behind me sells a jammer that halves their range.', choices: [work, { label: 'Got it.' }] },
+        };
+      },
+    },
+    {
       id: 'mog', name: 'Mog', title: "Vool's other collector",
       look: { cloth: 0x2a3a2a, accent: 0x8a8a8a, skin: 0x7a6a9a, scale: 1.1, hat: 'cap' },
       pos: null, facing: Math.PI,
@@ -268,6 +283,11 @@ export function createPeople(scene, ctx, shelf) {
   const rusk = people.find((p) => p.id === 'rusk'), mog = people.find((p) => p.id === 'mog');
   rusk.pos = shelf.center.clone().add(V(3, 0, 4));
   mog.pos = shelf.center.clone().add(V(-3, 0, 6));
+  // The fixer keeps to the east rail, where a pilot lands.
+  const sable = people.find((p) => p.id === 'sable');
+  sable.pos = shelf.center.clone().add(V(7, 0, -8));
+  sable.talkAt = sable.pos.clone().add(V(-1.8, 0, 0));
+  FIXER.pos.copy(sable.talkAt);
 
   for (const p of people) {
     const model = createHumanoid(p.look);

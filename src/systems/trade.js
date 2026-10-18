@@ -1,5 +1,6 @@
 import { state, addCredits } from './state.js';
 import { openPanel, h } from '../ui/panel.js';
+import { placeOf } from './places.js';
 
 // Trade: an inventory (your cargo hold), a catalogue of goods, and shops that
 // both sell and buy. Each shop pays more for some kinds of goods than others,
@@ -59,6 +60,7 @@ const RAW = {
   turbo: ['Turbo injector', 'parts', 800, 'Install for +12 m/s top speed.', { install: 'turbo' }],
   cargopod: ['Cargo pod', 'parts', 600, 'Install for +20 cargo space.', { install: 'cargo' }],
   plating: ['Hull plating', 'parts', 450, 'Install to halve damage to fragile cargo.', { install: 'plating' }],
+  jammer: ['Scanner jammer', 'parts', 900, 'Install to halve the range Spire Security can scan you from.', { install: 'jammer' }],
 };
 
 export const ITEMS = Object.fromEntries(Object.entries(RAW).map(([id, [name, cat, base, desc, effect]]) => [id, { id, name, cat, base, desc, effect }]));
@@ -75,19 +77,12 @@ const SHOP_DEFS = {
   odds: { name: 'Odds & Ends', where: 'Galleria Market', sells: ['holopet', 'oldcoin', 'shard', 'idol', 'pearl', 'cola'], pays: { curio: 1.05 }, markup: 1.05 },
   emporium: { name: 'Skyline Emporium', where: 'Spire Promenade', sells: ['wine', 'perfume', 'sculpture', 'ring', 'holocron', 'silk'], pays: { luxury: 1.1, curio: 0.9 }, markup: 1.2 },
   dealerparts: { name: 'Jump Station Parts Counter', where: 'Spire Promenade', sells: ['turbo', 'cargopod', 'plating', 'powercell'], pays: { parts: 0.7, tech: 0.8 }, markup: 1.0 },
-  black: { name: 'The Shelf (black market)', where: 'Undercity Shelf', sells: ['glitter', 'redspice', 'bluehaze', 'enckey', 'navcomp', 'stim'], pays: { spice: 1.0, luxury: 1.3, tech: 1.1, curio: 1.2 }, markup: 0.9 },
+  black: { name: 'The Shelf (black market)', where: 'Undercity Shelf', sells: ['glitter', 'redspice', 'bluehaze', 'enckey', 'navcomp', 'stim', 'jammer'], pays: { spice: 1.0, luxury: 1.3, tech: 1.1, curio: 1.2 }, markup: 0.9 },
 };
 
-// Rooftop deck traders: each wants one kind of goods badly and has a cheap
-// line in another. Derived from the deck's name so it never changes.
-const DEMANDS = ['tech', 'luxury', 'goods', 'curio', 'food'];
-const SUPPLY = {
-  tech: ['powercell', 'blankchip', 'comlink', 'holoemitter'],
-  luxury: ['perfume', 'wine', 'silk'],
-  goods: ['medpac', 'masks', 'tools', 'fabric', 'gel'],
-  curio: ['oldcoin', 'starmap', 'shard', 'droidhead'],
-  food: ['mealcrate', 'jerky', 'cafbeans', 'ration'],
-};
+// Rooftop deck traders: each wants one kind of goods badly and sells what its
+// kind of place has to spare (a sky farm sells food, a shipyard tools). It
+// never buys back what it sells, or one stall would be a money machine.
 function hashStr(s) {
   let x = 2166136261;
   for (const c of s) x = Math.imul(x ^ c.charCodeAt(0), 16777619) >>> 0;
@@ -95,16 +90,14 @@ function hashStr(s) {
 }
 function deckShop(deckName) {
   const k = hashStr(deckName);
-  const want = DEMANDS[k % DEMANDS.length];
-  let has = DEMANDS[(k >>> 4) % DEMANDS.length];
-  if (has === want) has = DEMANDS[(DEMANDS.indexOf(want) + 2) % DEMANDS.length];
+  const p = placeOf(deckName);
   return {
-    name: `${deckName} trader`,
+    name: `${p.venue} trader`,
     where: deckName,
-    sells: SUPPLY[has],
-    pays: { [want]: 1.35 + ((k >>> 8) % 30) / 100, '*': 0.55 },
+    sells: p.sells.filter((id) => ITEMS[id].cat !== p.wants),
+    pays: { [p.wants]: 1.35 + ((k >>> 8) % 30) / 100, '*': 0.55 },
     markup: 0.85,
-    wants: want,
+    wants: p.wants,
   };
 }
 
@@ -147,6 +140,20 @@ export function capacity() {
 export function cargoCount() {
   return Object.values(inventory()).reduce((a, b) => a + b, 0);
 }
+// Spice in the hold: what a Spire Security scan finds.
+export function contrabandCount() {
+  const inv = inventory();
+  return Object.keys(inv).reduce((n, id) => n + (ITEMS[id] && ITEMS[id].cat === 'spice' ? inv[id] : 0), 0);
+}
+
+// Security takes every spice item in the hold.
+export function confiscate() {
+  const inv = inventory();
+  let n = 0;
+  for (const id of Object.keys(inv)) if (ITEMS[id] && ITEMS[id].cat === 'spice') { n += inv[id]; delete inv[id]; }
+  return n;
+}
+
 export function addItem(id, n = 1) {
   const inv = inventory();
   inv[id] = (inv[id] || 0) + n;
@@ -193,6 +200,7 @@ export function useItem(id) {
     if (e.install === 'turbo' && (up.turbo || 0) >= 3) return 'Your speeder already has three turbo injectors.';
     if (e.install === 'cargo' && (up.cargo || 0) >= 3) return 'No room for another cargo pod.';
     if (e.install === 'plating' && up.plating) return 'Your hull is already plated.';
+    if (e.install === 'jammer' && up.jammer) return 'A jammer is already fitted.';
     up[e.install] = (up[e.install] || 0) + 1;
     removeItem(id);
     return `Installed: ${it.name}.`;

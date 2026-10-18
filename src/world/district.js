@@ -7,6 +7,8 @@ import { Elevator, SHAFT } from './elevator.js';
 import { addInteract, addZone, npcZones, pads, decks } from '../systems/interact.js';
 import { patchFog } from './env.js';
 import { batchStatic } from './batch.js';
+import { decorateDeck } from './deckDecor.js';
+import { placeOf } from '../systems/places.js';
 
 // The hub: four public levels wrapped around the Spire, joined by the glass
 // lift, plus every rooftop deck out in the city.
@@ -406,7 +408,8 @@ function buildDecks(g, cityDecks) {
     pads.push({ name: d.name, x: pcx, y: L + 0.4, z: pcz, size: ps });
     // Kiosk with the drop-off terminal.
     const kx = x0 + 9, kz = z0 + 8;
-    const neon = rng.pick(neons);
+    const place = placeOf(d.name);
+    const neon = MAT[place.neon] || rng.pick(neons);
     room(g, kx - 6, kz - 5, kx + 6, kz + 5, L, 4.5, MAT.wallDark, [{ side: 'n', at: kx, width: 3 }], { ceilMat: MAT.ceilWhite, frameMat: neon });
     sign(g, d.name.toUpperCase(), kx, L + 5.6, kz + 5.3, 12, 1.5, 0, { fg: neon.userData.css, glyphs: true, intensity: 2.6 });
     box(g, kx + 3, L, kz + 5.4, kx + 4.2, L + 1.5, kz + 6.2, MAT.metal, { noWalk: true });
@@ -427,9 +430,10 @@ function buildDecks(g, cityDecks) {
     lamp(g, x1 - 4, L, z0 + 2.5);
     planter(g, x0 + 4, L, z1 - 6, 1.4);
     bench(g, x0 + 12, L, z0 + d.d * 0.55, 0);
-    addZone(d.name, 'Rooftop deck', x0, L - 1, z0, x1, L + 20, z1, 2);
+    decorateDeck(g, d, place, rng);
+    addZone(d.name, `${place.venue} · ${place.label}`, x0, L - 1, z0, x1, L + 20, z1, 2);
     npcZones.push({ x0: x0 + 2, x1: x1 - 2, z0: z0 + 2, z1: z1 - 2, y: L, count: rng.int(5, 9) });
-    decks.push({ ...d, dropPos });
+    decks.push({ ...d, dropPos, theme: place.theme, venue: place.venue });
   }
 }
 

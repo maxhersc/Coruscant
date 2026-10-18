@@ -80,6 +80,20 @@ kbd {
 .job-time { font-size: 18px; font-weight: 700; }
 .job-time.late { color: var(--red); }
 .job-pay { color: var(--amber); font-weight: 700; font-size: 18px; }
+.job-kicker.bad { color: var(--red); }
+#heat { top: 60px; right: 16px; width: 250px; opacity: 0; transform: translateX(20px); transition: opacity 0.3s, transform 0.3s; }
+#heat.show { opacity: 1; transform: none; }
+.heat-label { font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; color: var(--amber); margin-bottom: 4px; }
+#heat .bar i { background: linear-gradient(90deg, var(--amber), var(--red)); }
+#heat.chase { animation: siren 0.5s steps(1) infinite; }
+#heat.chase .heat-label { color: var(--red); }
+#heat.losing .bar i { background: linear-gradient(90deg, #3366ff, var(--cyan)); }
+@keyframes siren { 0% { box-shadow: 0 0 18px rgba(255, 50, 60, 0.75); border-color: rgba(255, 60, 70, 0.9); } 50% { box-shadow: 0 0 18px rgba(50, 100, 255, 0.75); border-color: rgba(70, 120, 255, 0.9); } }
+.job-offer .tag { margin-left: 0; margin-right: 6px; }
+.job-offer > div > div:first-child b { margin-right: 8px; }
+.tag.bad { color: var(--red); border-color: rgba(255, 107, 107, 0.5); }
+.tag.info { color: #c7a6ff; border-color: rgba(199, 166, 255, 0.4); }
+.result .thanks { font-style: italic; color: var(--ink); margin: 8px 0 4px; }
 
 #flight { right: 16px; bottom: 16px; width: 170px; opacity: 0; transition: opacity 0.3s; }
 #flight.show { opacity: 1; }

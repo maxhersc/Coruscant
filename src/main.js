@@ -24,7 +24,9 @@ import { Speeder, SPEEDER_MODELS } from './player/speeder.js';
 import { CameraRig } from './player/cameraRig.js';
 import { state, tick, hooks, addCredits, bodySpeedMul, totalMinutes } from './systems/state.js';
 import { interactables, nearestInteract, npcZones, zoneAt, pads } from './systems/interact.js';
-import { minutesLeft, GUILD } from './systems/jobs.js';
+import { minutesLeft, GUILD, passengerOf } from './systems/jobs.js';
+import * as jobs from './systems/jobs.js';
+import { police, updatePolice, openStop, heatStatus, carrying } from './systems/police.js';
 import { saveGame, loadGame } from './systems/save.js';
 import * as acts from './systems/activities.js';
 import { settings, loadSettings, saveSettings, QUALITY } from './systems/settings.js';
@@ -155,6 +157,7 @@ async function build() {
   await step(82, 'Fuelling your speeder…');
   const walker = new Walker(scene);
   const speeder = new Speeder(scene, 'courier');
+  speeder.onBump = (impact) => onBump(impact);
   const rig = new CameraRig(camera);
   const race = createSkyrace(scene, district.raceBoard, sfx, toast);
   const flyers = createFlyers(scene);
@@ -163,6 +166,7 @@ async function build() {
     openLoan: () => acts.openLoan(ctx),
     openBlackjack: () => openBlackjack(sfx),
     escape: () => startEscape(),
+    openFixer: () => acts.openJobs('fixer', ctx),
   }, shelf);
   story.where.board = new THREE.Vector3(-78.5, LEVELS.promenade, -63.5);
   story.where.chips = new THREE.Vector3(72.8, LEVELS.market, 32);
@@ -356,6 +360,36 @@ function updateEscape() {
     sfx('bump');
     toast('They caught you and shook you down, but a security drone scared them off. You still have the key.', 'bad', 7000);
     story.advance("Vool's collectors roughed you up, but you held on to the cargo key.");
+  }
+}
+
+// Spire Security: what happens when a scan fills, a patrol is shaken off, or
+// one pulls you over.
+let sirenT = 0;
+const policeHooks = {
+  alert: (d) => {
+    toast(d < 380
+      ? 'Spire Security scanned your cargo! A patrol is on your tail. Boost away, or dive below the clouds.'
+      : `Your cargo tripped a security scanner. A patrol is on its way, ${(d / 1000).toFixed(1)} km out.`, 'bad', 7000);
+    sfx('alert');
+  },
+  lost: () => { toast('You lost the patrol. Breathe.', 'win', 5000); sfx('win'); },
+  stop: () => {
+    if (mode === 'fly') { G.speeder.speed = 0; G.speeder.vel.set(0, 0, 0); }
+    sfx('alert');
+    openStop({ toast, sfx, release: () => {}, flying: () => mode === 'fly' });
+  },
+};
+
+// A passenger talks while you fly.
+function updatePassenger(dt) {
+  const j = state.job;
+  const rider = passengerOf(j);
+  if (!rider || mode !== 'fly') return;
+  j.chat -= dt;
+  if (j.chat <= 0) {
+    j.chat = 22 + Math.random() * 14;
+    speech(rider.name, rider.lines[Math.floor(Math.random() * rider.lines.length)]);
   }
 }
 
@@ -747,6 +781,7 @@ function update(dt) {
   if (mode === 'walk') s.update(dt, false);
   updateRecall(dt);
   s.bonus = (trade.upgrades().turbo || 0) * 12;
+  s.load = state.job && state.job.heavy ? 0.7 : 1;
   bumpCooldown -= dt;
 
   // The world around.
@@ -755,6 +790,9 @@ function update(dt) {
   G.ads.update(elapsed);
   G.flyers.update(dt, elapsed, s.parked ? s.pos : null);
   G.people.update(dt, w.pos, camera.position, elapsed);
+  updatePolice(dt, { player: focus, flying: mode === 'fly', speed: s.speed, flyers: G.flyers.flyers, hooks: policeHooks });
+  if (police.wanted && police.dist < 700 && (sirenT -= dt) <= 0) { sirenT = 1.1; sfx('siren'); }
+  updatePassenger(dt);
   G.gaterun.update(dt, mode === 'fly' ? s.pos : null);
   updateEscape();
   if (mode === 'fly' && story.favorState('imani') === 'active') {
@@ -804,6 +842,7 @@ function update(dt) {
       speeder: s,
       guide,
       jobLeft: minutesLeft(),
+      heat: heatStatus(),
       landmarks: [
         { x: 0, z: 0, icon: '▲', cls: 'hub' },
         ...LANDMARKS.map((l) => ({ x: l.i * 120, z: l.j * 120, icon: '●' })),
@@ -822,6 +861,7 @@ function update(dt) {
       flying: mode === 'fly',
       places: nav.places,
       target: nav.target || (state.job ? { name: state.job.dest } : null),
+      police: carrying().any || police.wanted ? G.flyers.flyers.filter((f) => f.kind === 'police').map((f) => ({ x: f.pos.x, z: f.pos.z, chasing: !!f.chase, r: 120 * (trade.upgrades().jammer ? 0.5 : 1) })) : null,
     });
   }
 
@@ -851,6 +891,11 @@ function onBump(impact) {
     // Hull plating halves the knocks fragile cargo takes.
     state.job.damage += trade.upgrades().plating ? 0.5 : 1;
     toast(`Fragile cargo took a hit (${state.job.damage}).`, 'bad', 2500);
+  }
+  const rider = passengerOf(state.job);
+  if (rider) {
+    state.job.bumps += 1;
+    speech(rider.name, rider.bump);
   }
 }
 
@@ -972,7 +1017,7 @@ build().then((extra) => {
     step: (n, dt = 1 / 30) => { for (let i = 0; i < n; i++) { update(dt); endFrame(); } },
     doAction: (action, data) => doAction({ action, data }),
     nearest: () => nearestInteract(G.walker.pos),
-    nav, openMap, closeMap, story, trade,
+    nav, openMap, closeMap, story, trade, jobs, police, bump: (i) => { bumpCooldown = 0; onBump(i); },
     guide: () => guidance(mode === 'fly' ? G.speeder.pos : G.walker.pos, mode, G.speeder, mode === 'walk' && G.elevator.containsPlayer(G.walker.pos)), setMode: (m) => (m === 'fly' ? boardSpeeder() : exitSpeeder()), begin, world, interactables, get mode() { return mode; }, get quality() { return QUALITY[qualityLevel].name; }, openSettings,
     setQuality: (name) => { settings.quality = name; applyQuality(Math.max(0, QUALITY.findIndex((q) => q.name === name))); }, totalMinutes };
 });

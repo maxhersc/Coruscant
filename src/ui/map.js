@@ -105,7 +105,7 @@ function fillList(listEl, places) {
   }
 }
 
-export function drawMap({ player, speeder, flying, places, target }) {
+export function drawMap({ player, speeder, flying, places, target, police }) {
   const g = canvas.getContext('2d');
   const W = (canvas.width = canvas.clientWidth * devicePixelRatio);
   const H = (canvas.height = canvas.clientHeight * devicePixelRatio);
@@ -170,6 +170,17 @@ export function drawMap({ player, speeder, flying, places, target }) {
     g.fillStyle = '#ffd166';
     g.font = `700 ${Math.round(12 * dpr)}px system-ui, sans-serif`;
     g.fillText('THE SPIRE (hub) · zoom in for places', hx, hy - 12 * dpr);
+  }
+  // Security patrols, shown while you carry contraband, with the reach of
+  // their scanners.
+  for (const c of police || []) {
+    const [cx, cy] = P(c.x, c.z);
+    if (cx < -60 || cy < -60 || cx > W + 60 || cy > H + 60) continue;
+    g.strokeStyle = c.chasing ? 'rgba(255,80,90,0.8)' : 'rgba(90,140,255,0.45)';
+    g.lineWidth = 1.5 * dpr;
+    g.beginPath(); g.arc(cx, cy, Math.max(4 * dpr, c.r / mpp), 0, Math.PI * 2); g.stroke();
+    g.fillStyle = c.chasing ? '#ff5560' : '#5a8cff';
+    g.fillRect(cx - 3.5 * dpr, cy - 3.5 * dpr, 7 * dpr, 7 * dpr);
   }
   // Your speeder.
   if (!flying) {

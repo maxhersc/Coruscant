@@ -421,7 +421,129 @@ r = await ev(() => {
 });
 check('install a turbo injector on the speeder', /Installed/.test(r.msg) && r.bonus === 12, JSON.stringify(r));
 
-// 24. Auto quality steps down when frames are slow (a software renderer is).
+// 24. Deliveries: every deck is a kind of place, and its cargo suits it.
+r = await ev(() => {
+  const g = window.__game;
+  const decks = g.nav.places.filter((p) => p.group === 'Rooftop decks');
+  const labels = new Set(decks.map((p) => p.hint.split(' · ')[1]));
+  const offers = g.jobs.makeOffers('Courier Guild');
+  const kinds = offers.map((o) => o.kind);
+  const fixer = g.jobs.makeOffers('fixer');
+  return { decks: decks.length, labels: labels.size, kinds, fixer: fixer.map((o) => o.kind), fixerPay: Math.min(...fixer.map((o) => o.pay)), parcelPay: offers[0].pay };
+});
+check('every deck is a themed place', r.decks === 30 && r.labels === 10, JSON.stringify(r));
+check('the Guild offers express, freight, passenger and route jobs', ['parcel', 'express', 'freight', 'passenger', 'route'].every((k) => r.kinds.includes(k)), r.kinds.join(','));
+check('the fixer offers contraband that pays more than parcels', r.fixer.every((k) => k === 'smuggle') && r.fixerPay > r.parcelPay, JSON.stringify(r));
+
+// 25. A route: several stops, paid as you go.
+r = await ev(() => {
+  const g = window.__game;
+  g.state.job = null;
+  const o = g.jobs.makeOffers('Courier Guild').find((x) => x.kind === 'route');
+  g.jobs.acceptJob(o);
+  const c0 = g.state.credits, d0 = g.state.stats.delivered;
+  const seen = [];
+  for (let k = 0; k < o.stops.length; k++) {
+    seen.push(g.state.job.dest);
+    g.doAction('deck-terminal', { deck: g.state.job.dest });
+    document.getElementById('panel').querySelector('.close')?.click();
+  }
+  return { stops: o.stops.length, seen, done: !g.state.job, paid: g.state.credits - c0, delivered: g.state.stats.delivered - d0 };
+});
+check('a route takes three stops in order and pays', r.stops === 3 && new Set(r.seen).size === 3 && r.done && r.paid > 0 && r.delivered === 1, JSON.stringify(r));
+
+// 26. Heavy freight slows the speeder; a passenger tips for a smooth ride.
+r = await ev(() => {
+  const g = window.__game;
+  g.state.job = null;
+  g.jobs.acceptJob(g.jobs.makeOffers('Courier Guild').find((x) => x.kind === 'freight'));
+  g.step(1);
+  const load = g.G.speeder.load;
+  g.state.job = null;
+  g.step(1);
+  const unloaded = g.G.speeder.load;
+  // Two identical passenger runs, one smooth and one bumpy.
+  const o = g.jobs.makeOffers('Courier Guild').find((x) => x.kind === 'passenger');
+  const run = (bumps) => {
+    g.jobs.acceptJob(JSON.parse(JSON.stringify(o)));
+    for (let i = 0; i < bumps; i++) g.bump(20);
+    const c0 = g.state.credits;
+    g.doAction('deck-terminal', { deck: g.state.job.dest });
+    document.getElementById('panel').querySelector('.close')?.click();
+    return g.state.credits - c0;
+  };
+  const smooth = run(0), bumpy = run(4);
+  return { load, unloaded, smooth, bumpy, base: o.stops[0].pay };
+});
+check('heavy freight slows the speeder', r.load === 0.7 && r.unloaded === 1, JSON.stringify(r));
+check('passengers tip for a smooth ride, not a bumpy one', r.smooth > r.bumpy * 1.3 && r.bumpy <= Math.round(r.base * 1.25), JSON.stringify(r));
+
+// 27. Smuggling: a patrol scans you, chases you, and pulls you over.
+const patrolNear = async (secs) => ev((n) => {
+  const g = window.__game;
+  const s = g.G.speeder;
+  const cop = g.G.flyers.flyers.find((f) => f.kind === 'police' && !f.chase) || g.G.flyers.flyers.find((f) => f.kind === 'police');
+  for (let i = 0; i < n; i++) {
+    s.pos.set(-1020, 320, -1020); s.vel.set(0, 0, 0); s.speed = 0;
+    if (!g.police.wanted) cop.pos.set(-1000, 320, -1020);
+    g.step(1);
+    if (document.querySelector('#panel h2')?.textContent === 'Spire Security') break;
+  }
+  return { wanted: g.police.wanted, stopped: g.police.stopped, title: document.querySelector('#panel h2')?.textContent };
+}, secs * 30);
+r = await ev(() => {
+  const g = window.__game;
+  g.state.job = null;
+  g.state.credits = 3000;
+  if (g.mode !== 'fly') g.setMode('fly');
+  g.jobs.acceptJob(g.jobs.makeOffers('fixer')[0]);
+  return g.state.job.contraband;
+});
+r = await patrolNear(12);
+check('a patrol scans contraband and pulls you over', r.wanted && r.stopped && r.title === 'Spire Security', JSON.stringify(r));
+const c3 = await ev(() => window.__game.state.credits);
+await ev(() => document.querySelector('#panel .dialogue-choices button').click());
+r = await ev(() => ({ job: window.__game.state.job, credits: window.__game.state.credits, busted: window.__game.state.stats.busted, wanted: window.__game.police.wanted }));
+check('submitting to a search costs the cargo and a fine', !r.job && r.credits < c3 && r.busted === 1 && !r.wanted, JSON.stringify(r));
+r = await ev(() => {
+  const g = window.__game;
+  g.police.cool = 0;
+  g.jobs.acceptJob(g.jobs.makeOffers('fixer')[0]);
+  const s = g.G.speeder;
+  const cop = g.G.flyers.flyers.find((f) => f.kind === 'police');
+  let wanted = false;
+  for (let i = 0; i < 300 && !g.police.wanted; i++) { s.pos.set(-1020, 320, -1020); s.vel.set(0, 0, 0); cop.pos.set(-990, 320, -1020); g.step(1); }
+  wanted = g.police.wanted;
+  // Dive under the clouds and hold there.
+  for (let i = 0; i < 300 && g.police.wanted; i++) { s.pos.set(-1020, 80, -1020); s.vel.set(0, 0, 0); s.speed = 0; g.step(1); }
+  return { wanted, after: g.police.wanted, stopped: g.police.stopped, job: !!g.state.job, copY: cop.pos.y };
+});
+check('diving under the clouds loses the patrol and keeps the cargo', r.wanted && !r.after && !r.stopped && r.job && r.copY > 110, JSON.stringify(r));
+r = await ev(() => {
+  const g = window.__game;
+  const dest = g.state.job.dest;
+  const c0 = g.state.credits;
+  if (dest === 'Undercity Shelf') g.G.people.talkTo('sable', () => {});
+  else g.doAction('deck-terminal', { deck: dest });
+  const btn = [...document.querySelectorAll('#panel button')].find((b) => /Hand it over/.test(b.textContent));
+  btn?.click();
+  const paid = g.state.credits - c0;
+  document.getElementById('panel').querySelector('.close')?.click();
+  return { dest, paid, job: g.state.job, smuggled: g.state.stats.smuggled };
+});
+check('a smuggling run pays out on delivery', !r.job && r.paid > 300 && r.smuggled === 1, JSON.stringify(r));
+r = await ev(() => {
+  const g = window.__game;
+  g.G.people.talkTo('sable', () => {});
+  const btn = [...document.querySelectorAll('#panel button')].find((b) => /Show me the work/.test(b.textContent));
+  btn?.click();
+  const out = { title: document.querySelector('#panel h2')?.textContent, offers: document.querySelectorAll('#panel .job-offer').length };
+  document.getElementById('panel').querySelector('.close')?.click();
+  return out;
+});
+check('Sable the fixer offers smuggling runs', r.title === 'Sable · Smuggling runs' && r.offers === 3, JSON.stringify(r));
+
+// 28. Auto quality steps down when frames are slow (a software renderer is).
 // Its own page, without ?low, so it starts at high.
 {
   await page.close();

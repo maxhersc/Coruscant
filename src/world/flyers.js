@@ -4,6 +4,7 @@ import { makeRng } from '../core/rng.js';
 import { buildSpeederMesh } from '../player/speeder.js';
 import { glowMat } from './env.js';
 import { pads } from '../systems/interact.js';
+import { world } from '../core/collision.js';
 
 // Craft that fly near you rather than on the far skylanes: air taxis that
 // land on pads, wait, and take off for another, and police patrols with
@@ -102,10 +103,11 @@ export function createFlyers(scene) {
     };
     flyers.push(f);
   }
-  // Police loop rectangles of streets.
-  for (let i = 0; i < 6; i++) {
+  // Police loop rectangles of streets. A patrol that is sent after someone
+  // (f.chase, set by the police system) leaves its loop and closes in.
+  for (let i = 0; i < 12; i++) {
     const built = make('police');
-    const cx = street(rng.range(-1500, 1500)), cz = street(rng.range(-1500, 1500));
+    const cx = street(rng.range(-1700, 1700)), cz = street(rng.range(-1700, 1700));
     const w = CELL * rng.int(2, 6), d = CELL * rng.int(2, 6);
     const alt = clearAltitude(rng.range(160, 520));
     const loop = [
@@ -115,7 +117,26 @@ export function createFlyers(scene) {
     flyers.push({ kind: 'police', ...built, pos: loop[0].clone(), path: loop, loop: true, seg: 1, speed: rng.range(80, 120), yaw: 0, bank: 0 });
   }
 
-  const dir = new THREE.Vector3();
+  const dir = new THREE.Vector3(), nrm = new THREE.Vector3();
+  // Face the direction of horizontal travel; bank into turns.
+  const orient = (f, d3, dt, t, flash) => {
+    if (Math.abs(d3.x) + Math.abs(d3.z) > 0.5) {
+      const want = Math.atan2(d3.x, d3.z);
+      let d = want - f.yaw;
+      while (d > Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+      f.yaw += d * Math.min(1, dt * 3);
+      f.bank += (THREE.MathUtils.clamp(-d * 0.8, -0.6, 0.6) - f.bank) * Math.min(1, dt * 3);
+    } else f.bank *= 1 - Math.min(1, dt * 3);
+    f.group.position.copy(f.pos);
+    f.group.rotation.set(0, f.yaw, f.bank, 'YXZ');
+    f.exhaust.color.setRGB(2.4, 1.6, 0.8);
+    if (f.lights) {
+      const on = Math.floor(t * flash) % 2 === 0;
+      f.lights[0].visible = on;
+      f.lights[1].visible = !on;
+    }
+  };
   const update = (dt, t, avoid) => {
     for (const f of flyers) {
       if (f.kind === 'taxi' && !f.path) {
@@ -131,6 +152,17 @@ export function createFlyers(scene) {
           f.seg = 1;
           f.pad = next;
         }
+        continue;
+      }
+      if (f.chase) {
+        // Hold station a few metres off whoever it is chasing.
+        dir.subVectors(f.chase, f.pos);
+        const dist = dir.length();
+        const step = Math.min(Math.max(0, dist - 9), f.chaseSpeed * dt);
+        if (dist > 0.01) f.pos.addScaledVector(dir, step / dist);
+        // Blocked by a tower: slide along it and climb over.
+        if (world.resolveSphere(f.pos, 2.5, nrm)) f.pos.y += 45 * dt;
+        orient(f, dir, dt, t, 12);
         continue;
       }
       const target = f.path[f.seg];
@@ -150,23 +182,9 @@ export function createFlyers(scene) {
       } else {
         f.pos.addScaledVector(dir, step / dist);
       }
-      // Face the direction of horizontal travel; bank into turns.
-      if (Math.abs(dir.x) + Math.abs(dir.z) > 0.5) {
-        const want = Math.atan2(dir.x, dir.z);
-        let d = want - f.yaw;
-        while (d > Math.PI) d -= Math.PI * 2;
-        while (d < -Math.PI) d += Math.PI * 2;
-        f.yaw += d * Math.min(1, dt * 3);
-        f.bank += (THREE.MathUtils.clamp(-d * 0.8, -0.6, 0.6) - f.bank) * Math.min(1, dt * 3);
-      } else f.bank *= 1 - Math.min(1, dt * 3);
-      f.group.position.copy(f.pos);
-      f.group.rotation.set(0, f.yaw, f.bank, 'YXZ');
-      f.exhaust.color.setRGB(2.4, 1.6, 0.8);
-      if (f.lights) {
-        const on = Math.floor(t * 6) % 2 === 0;
-        f.lights[0].visible = on;
-        f.lights[1].visible = !on;
-      }
+      // A patrol back from a chase slides around towers on its way home.
+      if (f.kind === 'police' && world.resolveSphere(f.pos, 2.5, nrm)) f.pos.y += 45 * dt;
+      orient(f, dir, dt, t, 6);
     }
   };
   return { flyers, update };

@@ -1,7 +1,8 @@
 import { state, addCredits, totalMinutes } from './state.js';
 import { openPanel, closePanel, h } from '../ui/panel.js';
 import { SPEEDER_MODELS } from '../player/speeder.js';
-import { makeOffers, acceptJob, deliver, abandonJob, GUILD, minutesLeft } from './jobs.js';
+import { makeOffers, acceptJob, deliver, abandonJob, GUILD, FIXER, minutesLeft, describe, passengerOf } from './jobs.js';
+import { placeOf } from './places.js';
 import { saveGame, clearSave } from './save.js';
 
 // Shops, terminals and services: every interaction that opens a panel.
@@ -116,36 +117,55 @@ export function openLoan(ctx) {
 }
 
 // The job board at the Guild and the terminals on each deck.
+const fmtTime = (m) => `${Math.floor(Math.abs(m) / 60)}h ${String(Math.floor(Math.abs(m) % 60)).padStart(2, '0')}m`;
+
+// A job board: the Guild's, a deck's courier terminal, or the fixer's
+// ('fixer'). Opening it where the active job is due hands the cargo over.
 export function openJobs(from, ctx) {
-  openPanel(from === GUILD.name ? 'Courier Guild · Job Board' : `${from} · Courier Terminal`, (body) => {
+  const isFixer = from === 'fixer';
+  const at = isFixer ? FIXER.name : from;
+  const title = from === GUILD.name ? 'Courier Guild · Job Board' : isFixer ? 'Sable · Smuggling runs' : `${placeOf(from).venue} · Courier Terminal`;
+  const kicker = from === GUILD.name ? 'Courier work' : isFixer ? 'Undercity Shelf' : `${from} · ${placeOf(from).label}`;
+  openPanel(title, (body) => {
     const render = () => {
       body.replaceChildren();
       const j = state.job;
-      if (j && j.dest === from) {
+      if (j && j.dest === at) {
         const r = deliver();
         ctx.sfx('deliver');
-        ctx.event?.('delivered');
-        ctx.toast(`Delivered ${r ? '' : ''}for ${r.pay} cr. ${r.note}`, 'win', 6000);
-        body.append(h('div.result', {}, h('b.good', {}, `Delivery complete: +${r.pay} cr`), h('div.muted', {}, r.note)));
+        if (!r.more) ctx.event?.('delivered', { kind: j.kind });
+        ctx.toast(`Delivered for ${r.pay} cr. ${r.note}`, 'win', 6000);
+        body.append(h('div.result', {},
+          h('b.good', {}, `${j.kind === 'passenger' ? 'Passenger dropped off' : 'Delivered'}: +${r.pay} cr`),
+          h('div.muted', {}, r.note),
+          r.thanks ? h('p.thanks', {}, r.thanks) : '',
+          r.more ? h('div', {}, h('b', {}, `Next stop ${state.job.leg + 1}/${state.job.stops.length}: `), `${r.next.cargo} to ${r.next.dest}`) : '',
+          !r.more && j.stops && j.stops.length > 1 ? h('div', {}, h('b', {}, `Route complete: ${r.total} cr in all.`)) : ''));
+        if (r.more) return;
       } else if (j) {
         const left = minutesLeft();
+        const stop = j.stops && j.stops.length > 1 ? ` · stop ${j.leg + 1}/${j.stops.length}` : '';
         body.append(
-          h('div.result', {}, h('b', {}, `Active: ${j.cargo}`), h('div.muted', {}, `Deliver to ${j.dest} · ${left < 0 ? 'late' : `${Math.floor(left / 60)}h ${Math.floor(left % 60)}m left`} · ${j.pay} cr`)),
-          h('button.btn.ghost', { onclick: () => { abandonJob(); ctx.toast('Job abandoned. The Guild will remember.', 'bad'); render(); } }, 'Abandon job')
+          h('div.result', {}, h('b', {}, `Active: ${j.cargo}${stop}`), h('div.muted', {}, `Deliver to ${j.dest} · ${left < 0 ? 'late' : `${fmtTime(left)} left`} · ${j.pay} cr`)),
+          h('button.btn.ghost', { onclick: () => { abandonJob(); ctx.toast(j.contraband ? 'You dump the cargo. Sable will not be pleased.' : 'Job abandoned. The Guild will remember.', 'bad'); render(); } }, 'Abandon job')
         );
         return;
       }
-      body.append(h('p.muted', {}, 'Pick a job, fly to the destination deck, land, and use its courier terminal. Faster pays more. Fragile cargo hates collisions.'));
+      body.append(h('p.muted', {}, isFixer
+        ? 'Contraband pays three times the Guild rate. Spire Security patrols scan anything that flies near them: keep your distance, do not race past them, and if they light you up, run or dive under the clouds.'
+        : 'Fly to the destination, land, and use its courier terminal. Express cargo will not keep. Heavy freight slows you down. Routes have several stops. Passengers tip for a smooth ride.'));
       for (const o of makeOffers(from)) {
-        body.append(h('div.menu-item', {},
+        const d = describe(o);
+        body.append(h('div.menu-item.job-offer', {},
           h('div', {},
-            h('b', {}, o.cargo), o.fragile ? h('span.tag.warn', {}, 'fragile') : '',
-            h('div.muted', {}, `To ${o.dest} · ${(o.dist / 1000).toFixed(1)} km · ${Math.floor(o.limit / 60)}h ${o.limit % 60}m`)),
+            h('div', {}, h('b', {}, d.title), ...d.tags.map(([t, cls]) => h(`span.tag${cls ? '.' + cls : ''}`, {}, t))),
+            h('div.muted', {}, `${d.where} · ${d.km} km · ${d.time}`)),
           h('button.btn.primary', {
             onclick: () => {
               acceptJob(o);
               ctx.sfx('open');
-              ctx.toast(`Job accepted: ${o.cargo} to ${o.dest}. Follow the ◆ marker.`, 'info', 5000);
+              const rider = passengerOf(state.job);
+              ctx.toast(rider ? `${rider.name} climbs into your speeder. Fly them to ${o.dest}.` : `Job accepted: ${o.cargo} to ${o.dest}. Follow the ◆ marker.`, o.contraband ? 'bad' : 'info', 5000);
               closePanel();
             },
           }, `${o.pay} cr`)
@@ -153,7 +173,7 @@ export function openJobs(from, ctx) {
       }
     };
     render();
-  }, { kicker: 'Courier work' });
+  }, { kicker });
 }
 
 export function openTerminal(ctx) {

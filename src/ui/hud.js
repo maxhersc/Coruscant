@@ -60,7 +60,7 @@ const COMPASS = [
   ['N', 0], ['NE', 45], ['E', 90], ['SE', 135], ['S', 180], ['SW', 225], ['W', 270], ['NW', 315],
 ];
 
-export function updateHUD({ camera, mode, speeder, guide, jobLeft, landmarks }) {
+export function updateHUD({ camera, mode, speeder, guide, jobLeft, landmarks, heat }) {
   $('clock').textContent = clockString();
   $('day').textContent = `Day ${state.day}`;
   if (lastCredits !== state.credits) {
@@ -116,7 +116,12 @@ export function updateHUD({ camera, mode, speeder, guide, jobLeft, landmarks }) 
   const wp = $('waypoint');
   if (state.job) {
     card.classList.add('show');
-    card.querySelector('.job-cargo').textContent = state.job.cargo + (state.job.fragile ? ' · fragile' : '');
+    const j = state.job;
+    const kick = card.querySelector('.job-kicker');
+    const kinds = { express: 'Express job', freight: 'Heavy freight', route: 'Delivery route', passenger: 'Passenger', smuggle: 'Contraband run' };
+    kick.textContent = (kinds[j.kind] || 'Courier job') + (j.stops && j.stops.length > 1 ? ` · stop ${j.leg + 1}/${j.stops.length}` : '');
+    kick.classList.toggle('bad', !!j.contraband);
+    card.querySelector('.job-cargo').textContent = j.cargo + (j.fragile ? ' · fragile' : '') + (j.heavy ? ' · heavy' : '');
     card.querySelector('.job-dest').textContent = `→ ${state.job.dest}`;
     const left = jobLeft;
     const m = Math.floor(Math.abs(left) / 60), s = Math.floor(Math.abs(left) % 60);
@@ -125,6 +130,17 @@ export function updateHUD({ camera, mode, speeder, guide, jobLeft, landmarks }) 
     tEl.classList.toggle('late', left < 0);
     card.querySelector('.job-pay').textContent = `${state.job.pay} cr`;
   } else card.classList.remove('show');
+
+  // Contraband: the scan meter, or a pursuit.
+  const hb = $('heat');
+  if (heat) {
+    hb.classList.add('show');
+    hb.classList.toggle('chase', !!heat.chase && !heat.losing);
+    hb.classList.toggle('losing', !!heat.losing);
+    hb.querySelector('.heat-label').textContent = heat.label;
+    $('bar-heat').style.width = `${Math.round(heat.level * 100)}%`;
+    hb.style.top = `${state.job ? card.offsetHeight + 70 : 60}px`;
+  } else hb.classList.remove('show', 'chase', 'losing');
 
   // Waypoint marker and the next step toward it.
   const gd = $('guide');

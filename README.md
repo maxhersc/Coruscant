@@ -57,7 +57,12 @@ and glow if it drops below 40 fps, raising them again when there is headroom.
   - *Skyhaven Residences* (440): your apartment, Unit 4407.
   - *Skydeck* (600): viewers looking out over the city.
 - **30 rooftop decks** across the city, each with a pad, a kiosk, a courier
-  terminal and locals.
+  terminal and locals, and each its own kind of place with its own floor,
+  landmark and name: medical centres under green crosses, sky farms with
+  glasshouses, noble estates with fountains, nightclubs under a turning
+  holo-ring, shipyards with cranes, data exchanges with dishes and server
+  racks, temple shrines, food courts, embassies flying flags, and art
+  galleries.
 - **Landmarks**: the Assembly Dome, the five-spired Temple and seven monolith
   towers over 1.5 km tall.
 - **A crowd of about 600** people and droids who wander, stop, step aside and
@@ -94,9 +99,33 @@ Arm it at the kiosk by the East Pad; the next gate glows amber. Under par pays
   your bed. Run either out and you slow down; run out of energy and you
   collapse, and a medical droid bills you.
 - **Rent**: 120 credits at 06:00 every day.
-- **Work**: take courier jobs at the Courier Guild or any deck terminal. Land
-  at the destination deck and use its terminal. Early deliveries pay a bonus,
-  late ones are docked, and fragile cargo loses value with every collision.
+- **Work**: take courier jobs at the Courier Guild or any deck terminal, land
+  at the destination and use its terminal. The cargo suits the place it is
+  going: donor organs to clinics, kegs and speaker stacks to clubs, engine
+  blocks to shipyards, relics to shrines. Jobs come in kinds:
+  - *Parcel*: the everyday run.
+  - *Express*: cargo that will not keep. A tight clock, nearly double pay, and
+    a quarter of the fee if it arrives late.
+  - *Heavy freight*: pays well, but the speeder flies 30% slower with it.
+  - *Route*: two or three drops in a row across the city, paid as you go. It
+    takes a while, and it pays the most of the legal work.
+  - *Passenger*: a countess, an envoy, a DJ late for a set, a surgeon, a pair
+    of newlyweds... They talk while you fly and tip for a smooth ride; every
+    bump costs you the tip.
+  - *Contraband*: smuggling runs from Sable, the fixer on the Undercity Shelf,
+    and sometimes under the counter at nightclubs, shipyards and data
+    exchanges. They pay three times the Guild rate.
+  Early deliveries pay a bonus, late ones are docked, and fragile cargo loses
+  value with every collision.
+- **Spire Security**: patrols scan anything that flies near them, and the
+  embassies scan the air around their decks. Carry contraband (a smuggling
+  job, or spice in your hold) and the scan meter fills; when it is full a
+  patrol gives chase. Boost away until you are far enough off for long enough,
+  or dive under the clouds, where patrols will not follow. If one stays on your
+  tail it pulls you over: submit to a search (fine, cargo seized), offer a
+  "processing fee" (it might work), or hit the boost and run, once. While you
+  carry contraband the map shows every patrol and its scanner's reach. A
+  scanner jammer from the black market halves that reach.
 - **Betting** (in-game credits only): roulette, twenty-one, slots and Chance
   Cubes. Skyrace runs every few minutes: six pilots fly three laps of the
   streets around the Spire. Bet at the casino booth, then watch from the
@@ -134,12 +163,13 @@ src/
     atmosphere.js      cloud decks and searchlights
     undercity.js       the Undercity Shelf, below the clouds
     district.js        the Spire hub's four levels and the rooftop decks
+    deckDecor.js       what stands on each kind of rooftop deck
     elevator.js        the glass lift
     props.js           prop builders (rails, rooms, stalls, signs, pads)
     ads.js, beacons.js, landmarks.js, batch.js
   npc/                 the crowd (instanced, with swinging limbs) and the player model
   player/              walking, speeder flight, camera
-  systems/             time, needs, money, jobs, shops, trade, saving
+  systems/             time, needs, money, jobs, places, police, shops, trade, saving
   casino/              table games, Skyrace and the Gate Run
   story/               the storyline, named people and conversations
   ui/                  HUD, panels, map
@@ -158,7 +188,9 @@ walking, jumping, railings, the lift and its doors, food, courier jobs,
 flight and collisions, landing, delivery, the casino, Skyrace, rent, falling,
 sleep, settings, wayfinding, the speeder valet, the whole storyline, a
 favour, the Gate Run, trading (buy, sell, cargo limit, using and installing
-items) and automatic quality.
+items), the kinds of delivery (routes, heavy freight, passengers and their
+tips, smuggling), Spire Security (a scan, a stop, a search, losing a patrol
+under the clouds) and automatic quality.
 
 ```sh
 npm run build && npm run preview     # terminal 1
