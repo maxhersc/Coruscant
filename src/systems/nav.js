@@ -37,7 +37,7 @@ export function buildPlaces(speeder) {
     { name: 'Your apartment', pos: V(4, LEVELS.residences, 56), level: LEVELS.residences, hint: 'Sleep and save' },
     { name: 'Skydeck', pos: V(0, LEVELS.skydeck, -76), level: LEVELS.skydeck, hint: 'The best view in the city' },
   ].map((p) => ({ ...p, group: 'Spire hub' }));
-  const you = [{ name: 'Your speeder', get pos() { return speeder.pos; }, group: 'You', hint: 'Press F beside it to fly', dynamic: true }];
+  const you = [{ name: 'Your speeder', get pos() { return speeder.pos; }, group: 'You', hint: 'Press F beside it to fly, or V to have it brought to you', dynamic: true }];
   const deckPlaces = decks.map((d) => ({ name: d.name, pos: d.dropPos, group: 'Rooftop decks', hint: 'Land on the pad, walk to the terminal' }));
   const sights = LANDMARKS.map((l) => ({ name: l.name, pos: V(l.i * CELL, 320, l.j * CELL), group: 'Landmarks', hint: 'Fly past it', sight: true }));
   return [...hub, ...you, ...deckPlaces, ...sights];
@@ -102,7 +102,9 @@ export function guidance(player, mode, speeder, liftHasPlayer) {
   // On foot and the target is somewhere else in the city: fly.
   const sameDeck = !inHub(tp) && Math.hypot(player.x - tp.x, player.z - tp.z) < 60 && Math.abs(player.y - tp.y) < 4;
   if (!sameDeck && (!inHub(tp) || !inHub(player))) {
-    if (player.distanceTo(speeder.pos) > 6) return { pos: speeder.pos, label: name, step: 'Go to your speeder, then press F to fly' };
+    const far = player.distanceTo(speeder.pos);
+    if (far > 150) return { pos: speeder.pos, label: name, step: 'Press V to have your speeder brought to the nearest pad' };
+    if (far > 6) return { pos: speeder.pos, label: name, step: 'Go to your speeder, then press F to fly' };
     return { pos: tp, label: name, step: 'Press F to board and fly there' };
   }
   return { pos: tp, label: name, step: null };

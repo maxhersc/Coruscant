@@ -366,6 +366,69 @@ onPanel('close', () => {
   requestLock(canvas);
 });
 
+// Valet: a drone brings your parked speeder to the pad nearest you. It takes
+// a few seconds, longer from further away, then the speeder descends onto the
+// pad from above (pads are open to the sky, so the descent is clear).
+const VALET_FEE = 30;
+let recall = null;
+
+function nearestPadTo(p) {
+  let best = null, bd = Infinity;
+  for (const pad of pads) {
+    // Prefer pads on your own level: a pad 5 m away but 140 m below is no use.
+    const d = Math.hypot(pad.x - p.x, pad.z - p.z) + Math.abs(pad.y - p.y) * 3;
+    if (d < bd) { bd = d; best = pad; }
+  }
+  return best;
+}
+
+function callSpeeder() {
+  const s = G.speeder, w = G.walker;
+  if (mode === 'fly') { toast("You're already flying it.", 'info', 2000); return; }
+  if (recall) { toast(`Your speeder is on its way to ${recall.pad.name}.`, 'info', 2500); return; }
+  const pad = nearestPadTo(w.pos);
+  if (!pad) return;
+  const padPos = new THREE.Vector3(pad.x, pad.y, pad.z);
+  if (s.pos.distanceTo(padPos) < 12) { toast(`Your speeder is already at ${pad.name}.`, 'info', 2500); setTarget(nav.places.find((p) => p.group === 'You')); return; }
+  // Never strand a broke player: the valet is free when you cannot pay.
+  if (state.credits >= VALET_FEE) addCredits(-VALET_FEE, 'Speeder valet');
+  const dist = s.pos.distanceTo(padPos);
+  recall = { pad, wait: Math.min(14, 3 + dist / 180), descend: 0 };
+  s.group.visible = false;
+  sfx('board');
+  toast(`A valet drone is bringing your speeder to ${pad.name}. About ${Math.ceil(recall.wait + 3)} seconds.`, 'info', 5000);
+  setTarget(nav.places.find((p) => p.group === 'You'));
+}
+
+function updateRecall(dt) {
+  if (!recall) return;
+  const s = G.speeder, pad = recall.pad;
+  if (recall.wait > 0) {
+    recall.wait -= dt;
+    if (recall.wait <= 0) {
+      s.park(pad.x, pad.y, pad.z, s.yaw);
+      s.pos.y = pad.y + 60;
+      s.group.visible = true;
+      recall.descend = 3;
+      s.arriving = true;
+    }
+    return;
+  }
+  recall.descend -= dt;
+  const k = Math.max(0, recall.descend / 3);
+  // Ease down onto the pad; park() keeps it hovering once it arrives.
+  s.groundY = pad.y;
+  s.pos.y = pad.y + 0.9 + 60 * k * k;
+  s.sync();
+  if (recall.descend <= 0) {
+    s.arriving = false;
+    s.park(pad.x, pad.y, pad.z, s.yaw);
+    recall = null;
+    sfx('land');
+    toast(`Your speeder is waiting at ${pad.name}.`, 'win', 4000);
+  }
+}
+
 function boardSpeeder() {
   mode = 'fly';
   G.walker.setVisible(false);
@@ -485,6 +548,7 @@ function update(dt) {
   // Toggles.
   if (pressed('KeyH')) { helpOpen = !helpOpen; $('help').classList.toggle('hidden', !helpOpen); }
   if (pressed('KeyO')) openSettings();
+  if (pressed('KeyV')) callSpeeder();
 
   // Lift.
   const el = G.elevator;
@@ -546,6 +610,7 @@ function update(dt) {
     if (pressed('KeyF')) exitSpeeder();
   }
   if (mode === 'walk') s.update(dt, false);
+  updateRecall(dt);
   bumpCooldown -= dt;
 
   // The world around.

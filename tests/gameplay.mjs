@@ -289,7 +289,23 @@ r = await ev(() => {
 });
 check('guide sends you to your speeder for a far deck', /speeder|F to board/i.test(r || ''), r);
 
-// 19. Auto quality steps down when frames are slow (a software renderer is).
+// 19. Calling the speeder: it comes to the pad nearest you, even from across the city.
+r = await ev(() => {
+  const g = window.__game;
+  if (g.mode === 'fly') g.setMode('walk');
+  const deck = g.G.city.decks[0];
+  g.G.speeder.park(deck.x, deck.y, deck.z, 0); // stranded far away
+  g.G.walker.place(70, 300, 0, 0); // on the promenade
+  const c0 = g.state.credits;
+  g.input.pressed.add('KeyV');
+  g.step(1);
+  g.step(30 * 20); // 20 s of game time
+  const s = g.G.speeder;
+  return { paid: c0 - g.state.credits, pos: s.pos.toArray().map((v) => Math.round(v)), parked: s.parked, visible: s.group.visible };
+});
+check('V brings the speeder to the nearest pad', Math.abs(r.pos[0] - 132) < 2 && Math.abs(r.pos[1] - 301) < 2 && r.parked && r.visible && r.paid === 30, JSON.stringify(r));
+
+// 20. Auto quality steps down when frames are slow (a software renderer is).
 // Its own page, without ?low, so it starts at high.
 {
   await page.close();

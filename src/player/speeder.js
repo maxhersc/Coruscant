@@ -112,7 +112,7 @@ export class Speeder {
   update(dt, controlled) {
     this.time += dt;
     if (!controlled) {
-      if (this.parked) {
+      if (this.parked && !this.arriving) {
         this.pos.y = this.groundY + 0.9 + Math.sin(this.time * 1.6) * 0.06;
         this.roll *= 0.9;
         this.pitch *= 0.9;
