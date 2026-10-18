@@ -369,7 +369,7 @@ onPanel('close', () => {
 // Valet: a drone brings your parked speeder to the pad nearest you. It takes
 // a few seconds, longer from further away, then the speeder descends onto the
 // pad from above (pads are open to the sky, so the descent is clear).
-const VALET_FEE = 30;
+const VALET_FEE = 10;
 let recall = null;
 
 function nearestPadTo(p) {
@@ -390,8 +390,9 @@ function callSpeeder() {
   if (!pad) return;
   const padPos = new THREE.Vector3(pad.x, pad.y, pad.z);
   if (s.pos.distanceTo(padPos) < 12) { toast(`Your speeder is already at ${pad.name}.`, 'info', 2500); setTarget(nav.places.find((p) => p.group === 'You')); return; }
-  // Never strand a broke player: the valet is free when you cannot pay.
-  if (state.credits >= VALET_FEE) addCredits(-VALET_FEE, 'Speeder valet');
+  // Always charged; if you are broke it goes on your balance (like rent),
+  // so you are never stranded without your speeder.
+  addCredits(-VALET_FEE, 'Speeder valet');
   const dist = s.pos.distanceTo(padPos);
   recall = { pad, wait: Math.min(14, 3 + dist / 180), descend: 0 };
   s.group.visible = false;

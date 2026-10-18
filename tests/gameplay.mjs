@@ -303,7 +303,7 @@ r = await ev(() => {
   const s = g.G.speeder;
   return { paid: c0 - g.state.credits, pos: s.pos.toArray().map((v) => Math.round(v)), parked: s.parked, visible: s.group.visible };
 });
-check('V brings the speeder to the nearest pad', Math.abs(r.pos[0] - 132) < 2 && Math.abs(r.pos[1] - 301) < 2 && r.parked && r.visible && r.paid === 30, JSON.stringify(r));
+check('V brings the speeder to the nearest pad', Math.abs(r.pos[0] - 132) < 2 && Math.abs(r.pos[1] - 301) < 2 && r.parked && r.visible && r.paid === 10, JSON.stringify(r));
 
 // 20. Auto quality steps down when frames are slow (a software renderer is).
 // Its own page, without ?low, so it starts at high.

@@ -27,7 +27,7 @@ click again.
 | `W A S D` walk, `Shift` run, `Space` jump | `W` throttle, `S` brake, `Shift` boost |
 | Mouse look, wheel zoom | Mouse steer, `A D` strafe |
 | `E` interact / talk | `Space` rise, `C` descend |
-| `F` board your speeder, `V` call it to the nearest pad | `F` land (slow down over a floor first) |
+| `F` board your speeder, `V` call it to the nearest pad (10 cr) | `F` land (slow down over a floor first) |
 
 `M` map and places · `H` help · `O` settings · `Esc` close a panel or release the mouse.
 
