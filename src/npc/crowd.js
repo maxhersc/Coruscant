@@ -32,6 +32,11 @@ const LINES = [
   'Spare a credit? No? Fair enough.',
   'It is never really night here. The city does not allow it.',
   'Three moons tonight. Good luck for gamblers, they say.',
+  'The deck traders out in the city pay double for the right goods. Each one wants something different.',
+  'Buy tech at Droid Parts, sell it to a deck that wants it. That is how my uncle paid for his speeder.',
+  'The Pawn Shop buys anything. Badly, but anything.',
+  'There is a market under the clouds where nobody asks what is in the crate.',
+  'Prices at the Galleria change every morning. Watch for the green ones.',
 ];
 
 const DROID_LINES = [

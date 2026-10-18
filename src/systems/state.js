@@ -12,6 +12,8 @@ export const state = {
   loan: null,          // {owed, dueDay}
   rentDueDay: 2,       // rent is collected at 06:00 on this day
   job: null,           // active courier job
+  inventory: { ration: 2, cola: 1 }, // cargo hold: item id -> count
+  upgrades: {},        // installed speeder parts
   stats: { delivered: 0, earned: 0, wagered: 0, won: 0, races: 0 },
   tutorialDone: false,
 };

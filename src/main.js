@@ -34,6 +34,7 @@ import { createGateRun } from './casino/gaterun.js';
 import { buildUndercity } from './world/undercity.js';
 import { createPeople } from './story/people.js';
 import * as story from './story/story.js';
+import * as trade from './systems/trade.js';
 import { openPanel, closePanel, isPanelOpen, onPanel, h } from './ui/panel.js';
 import { updateHUD, toast, showLocation, setPrompt, speech } from './ui/hud.js';
 import { initMap, drawMap, setupMap } from './ui/map.js';
@@ -181,6 +182,10 @@ async function build() {
   nav.places = buildPlaces(speeder, [
     ...people.people.filter((p) => !p.visible).map((p) => ({ name: p.name, get pos() { return p.talkAt || p.pos; }, group: 'People', hint: p.title, level: Math.hypot(p.pos.x, p.pos.z) < 170 ? p.pos.y : undefined })),
     { name: 'Undercity Shelf', pos: shelf.center, group: 'Hidden places', hint: 'An old platform below the clouds' },
+    ...interactables.filter((it) => (it.action === 'shop' && !it.data.shop.startsWith('deck:')) || it.action === 'chips').map((it) => {
+      const def = trade.shopDef(it.action === 'chips' ? 'chips' : it.data.shop);
+      return { name: def.name, pos: it.pos, group: 'Shops', hint: `Buys and sells · ${def.where}`, level: Math.hypot(it.pos.x, it.pos.z) < 170 ? it.pos.y : undefined };
+    }),
   ]);
   mapUI = setupMap($('mapcanvas'), $('placelist'), pickPlace);
   $('map-center').onclick = () => mapUI.recenter();
@@ -354,31 +359,22 @@ function updateEscape() {
   }
 }
 
-// The Data Chips stall: a decoder chip for the story, trinkets otherwise.
+// The Data Chips stall trades like any shop, and sells the story's decoder
+// chip when the story needs it.
 function openChips() {
-  openPanel('Data Chips', (body) => {
-    const msg = h('div.result');
-    const item = (name, price, desc, buy) => h('div.menu-item', {},
-      h('div', {}, h('b', {}, name), h('div.muted', {}, desc)),
-      h('button.btn', { onclick: () => {
-        if (state.credits < price) { msg.textContent = 'Not enough credits.'; sfx('lose'); return; }
-        addCredits(-price, name);
+  trade.openShop('chips', ctx, () => {
+    if (!story.isAt('buy-chip')) return h('span');
+    return h('div.menu-item', {},
+      h('div', {}, h('b', {}, 'Decoder chip (military grade)'), h('div.muted', {}, 'The seller pretends not to know what it is for.')),
+      h('button.btn.primary', { onclick: () => {
+        if (state.credits < 150) { toast('Not enough credits.', 'bad'); sfx('lose'); return; }
+        addCredits(-150, 'Decoder chip');
         sfx('coin');
-        buy();
-      } }, `${price} cr`));
-    if (story.isAt('buy-chip')) {
-      body.append(item('Decoder chip (military grade)', 150, 'The seller pretends not to know what it is for.', () => {
         story.flag('hasChip', true);
         story.advance('You bought a military decoder chip at the Data Chips stall.');
         closePanel();
-      }));
-    }
-    body.append(
-      item('Starmap chip', 25, 'Every lane in the sector. Out of date by a decade.', () => { msg.textContent = 'You pocket the starmap chip. It hums faintly.'; }),
-      item('Holo-pet chip', 40, 'A tiny holographic cat that ignores you.', () => { msg.textContent = 'The holo-cat looks at you once and goes to sleep.'; }),
-      msg
-    );
-  }, { kicker: 'Galleria Market' });
+      } }, '150 cr'));
+  });
 }
 
 function searchCache() {
@@ -411,6 +407,7 @@ function doAction(it) {
     case 'sleep': acts.sleepUntilMorning(ctx); break;
     case 'person': G.people.talkTo(it.data.id, sfx); break;
     case 'chips': openChips(); break;
+    case 'shop': trade.openShop(it.data.shop, ctx); break;
     case 'cache': searchCache(); break;
     case 'gaterun': G.gaterun.open(); break;
     case 'lift-call': {
@@ -686,6 +683,7 @@ function update(dt) {
   if (pressed('KeyO')) openSettings();
   if (pressed('KeyV')) callSpeeder();
   if (pressed('KeyJ')) story.openJournal(() => clearTarget());
+  if (pressed('KeyI')) trade.openInventory(ctx);
 
   // Lift.
   const el = G.elevator;
@@ -748,6 +746,7 @@ function update(dt) {
   }
   if (mode === 'walk') s.update(dt, false);
   updateRecall(dt);
+  s.bonus = (trade.upgrades().turbo || 0) * 12;
   bumpCooldown -= dt;
 
   // The world around.
@@ -849,7 +848,8 @@ function onBump(impact) {
   G.rig.shake = Math.min(1.5, impact / 30);
   sfx('bump');
   if (state.job && state.job.fragile) {
-    state.job.damage += 1;
+    // Hull plating halves the knocks fragile cargo takes.
+    state.job.damage += trade.upgrades().plating ? 0.5 : 1;
     toast(`Fragile cargo took a hit (${state.job.damage}).`, 'bad', 2500);
   }
 }
@@ -972,7 +972,7 @@ build().then((extra) => {
     step: (n, dt = 1 / 30) => { for (let i = 0; i < n; i++) { update(dt); endFrame(); } },
     doAction: (action, data) => doAction({ action, data }),
     nearest: () => nearestInteract(G.walker.pos),
-    nav, openMap, closeMap, story,
+    nav, openMap, closeMap, story, trade,
     guide: () => guidance(mode === 'fly' ? G.speeder.pos : G.walker.pos, mode, G.speeder, mode === 'walk' && G.elevator.containsPlayer(G.walker.pos)), setMode: (m) => (m === 'fly' ? boardSpeeder() : exitSpeeder()), begin, world, interactables, get mode() { return mode; }, get quality() { return QUALITY[qualityLevel].name; }, openSettings,
     setQuality: (name) => { settings.quality = name; applyQuality(Math.max(0, QUALITY.findIndex((q) => q.name === name))); }, totalMinutes };
 });

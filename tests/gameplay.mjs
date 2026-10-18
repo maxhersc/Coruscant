@@ -374,7 +374,54 @@ r = await ev(() => {
 });
 check('gate run times a full lap', r.best > 0 && !r.active, JSON.stringify(r));
 
-// 23. Auto quality steps down when frames are slow (a software renderer is).
+// 23. Trade: buy, carry, use, sell, and a profitable route exists somewhere.
+await ev(() => { window.__game.doAction('shop', { shop: 'droid' }); });
+r = await ev(() => ({ rows: document.querySelectorAll('#panel .trade-row').length, title: document.querySelector('#panel h2').textContent }));
+check('a shop opens with goods for sale', r.rows >= 6 && r.title === 'Droid Parts', JSON.stringify(r));
+await page.keyboard.press('Escape');
+r = await ev(() => {
+  const g = window.__game, t = g.trade;
+  g.state.credits = 5000;
+  g.state.inventory = {};
+  const p = t.buyPrice('droid', 'powercell');
+  const c0 = g.state.credits;
+  const err = t.buy('droid', 'powercell', 5);
+  const afterBuy = { err, paid: c0 - g.state.credits, expect: p * 5, have: g.state.inventory.powercell };
+  // Cargo hold limit.
+  g.state.inventory.ration = t.capacity() - t.cargoCount();
+  const full = t.buy('droid', 'powercell', 1);
+  g.state.inventory.ration = 1;
+  const hunger0 = g.state.hunger = 50;
+  const used = t.useItem('ration');
+  // Sell to a deck that wants tech; refuse at one that does not buy it.
+  const decks = g.G.city.decks.map((d) => d.name);
+  const techDeck = decks.find((n) => t.shopDef('deck:' + n).wants === 'tech');
+  const sold = t.sell('deck:' + techDeck, 'powercell', 5);
+  const refused = t.sellPrice('emporium', 'fabric');
+  // Is there an item bought somewhere and sold elsewhere for more today?
+  const shops = [...t.SHOP_IDS, ...decks.map((n) => 'deck:' + n)];
+  let best = 0;
+  for (const a of shops) for (const id of t.shopDef(a).sells) for (const b of shops) {
+    const gain = t.sellPrice(b, id) - t.buyPrice(a, id);
+    if (gain > best) best = gain;
+  }
+  return { afterBuy, full, used, hungerUp: g.state.hunger - hunger0, sold, left: g.state.inventory.powercell || 0, refused, best };
+});
+check('buy goods into the cargo hold', !r.afterBuy.err && r.afterBuy.paid === r.afterBuy.expect && r.afterBuy.have === 5, JSON.stringify(r.afterBuy));
+check('the cargo hold has a limit', /full/.test(r.full || ''), r.full);
+check('use a ration bar from cargo', /ration/i.test(r.used || '') && r.hungerUp === 20, JSON.stringify({ used: r.used, up: r.hungerUp }));
+check('sell cargo to a deck trader; others refuse what they do not want', !r.sold && r.left === 0 && r.refused === 0, JSON.stringify(r));
+check('a profitable trade route exists today', r.best > 20, String(r.best));
+r = await ev(() => {
+  const g = window.__game, t = g.trade;
+  g.state.inventory = { turbo: 1 };
+  const msg = t.useItem('turbo');
+  g.step(1);
+  return { msg, bonus: g.G.speeder.bonus };
+});
+check('install a turbo injector on the speeder', /Installed/.test(r.msg) && r.bonus === 12, JSON.stringify(r));
+
+// 24. Auto quality steps down when frames are slow (a software renderer is).
 // Its own page, without ?low, so it starts at high.
 {
   await page.close();

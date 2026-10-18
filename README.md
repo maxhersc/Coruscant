@@ -29,7 +29,7 @@ click again.
 | `E` interact / talk | `Space` rise, `C` descend |
 | `F` board your speeder, `V` call it to the nearest pad (10 cr) | `F` land (slow down over a floor first) |
 
-`J` journal · `M` map and places · `H` help · `O` settings · `Esc` close a panel or release the mouse.
+`J` journal · `I` cargo · `M` map and places · `H` help · `O` settings · `Esc` close a panel or release the mouse.
 
 **Finding your way**: press `M`, pick a place from the list (or click it on
 the map), and follow the pink ◆ marker and light pillar. The banner under the
@@ -101,6 +101,16 @@ Arm it at the kiosk by the East Pad; the next gate glows amber. Under par pays
   Cubes. Skyrace runs every few minutes: six pilots fly three laps of the
   streets around the Spire. Bet at the casino booth, then watch from the
   promenade or chase it in your speeder.
+- **Trade**: 40 kinds of goods in seven categories (food, tech, luxury, goods
+  and medicine, curios, speeder parts, and contraband spice). Every shop both
+  sells and buys: the Galleria Market stalls, the Skyline Emporium on the
+  Promenade, the parts counter at Jump Station, a trader on every rooftop deck
+  and a black market on the Undercity Shelf. Each shop pays more for some kinds
+  of goods than others, every price drifts day to day, and each deck trader
+  badly wants one thing, so buying in one place and selling in another pays.
+  Your speeder carries 30 items; press `I` for your cargo hold to eat, use,
+  install or drop things. Speeder parts install for more speed, more cargo
+  space or a plated hull that protects fragile deliveries.
 - **Speeders**: start with the Mk-II Courier and save up for the Vexa Sport or
   the Zenith Interceptor.
 - **Loans**: Vool lends fast. Miss the due date and his collectors take what
@@ -129,7 +139,7 @@ src/
     ads.js, beacons.js, landmarks.js, batch.js
   npc/                 the crowd (instanced, with swinging limbs) and the player model
   player/              walking, speeder flight, camera
-  systems/             time, needs, money, jobs, shops, saving
+  systems/             time, needs, money, jobs, shops, trade, saving
   casino/              table games, Skyrace and the Gate Run
   story/               the storyline, named people and conversations
   ui/                  HUD, panels, map
@@ -147,7 +157,8 @@ camera all query the same hash.
 walking, jumping, railings, the lift and its doors, food, courier jobs,
 flight and collisions, landing, delivery, the casino, Skyrace, rent, falling,
 sleep, settings, wayfinding, the speeder valet, the whole storyline, a
-favour, the Gate Run and automatic quality.
+favour, the Gate Run, trading (buy, sell, cargo limit, using and installing
+items) and automatic quality.
 
 ```sh
 npm run build && npm run preview     # terminal 1

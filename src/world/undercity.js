@@ -24,6 +24,7 @@ export function buildUndercity() {
   // A shack with a flickering sign, crates, pipes venting steam.
   box(g, x0 + 1, y, z0 + 1, x0 + 9, y + 4, z0 + 9, rust, { noWalk: true });
   sign(g, 'THE SHELF', x0 + 5, y + 4.8, z0 + 9.2, 7, 1.4, 0, { fg: '#ff5544', glyphs: true, intensity: 2.4 });
+  addInteract({ pos: new THREE.Vector3(x0 + 5, y, z0 + 10.5), radius: 2.6, label: 'Black market', action: 'shop', data: { shop: 'black' } });
   for (const [cx, cz, s] of [[x1 - 3, z0 + 3, 1.6], [x1 - 5.5, z0 + 3.4, 1.2], [x1 - 3.2, z0 + 6, 1.3], [x0 + 3, z1 - 8, 1.5], [x0 + 4.8, z1 - 6, 1.1]]) {
     box(g, cx - s / 2, y, cz - s / 2, cx + s / 2, y + s, cz + s / 2, MAT.wood, { noWalk: true });
   }

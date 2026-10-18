@@ -229,6 +229,14 @@ function promenade(g) {
   g.add(door);
   sign(g, 'THE SPIRE', 0, L + 10, 40.3, 18, 2.6, 0, { fg: '#fff2dd', glyphs: true });
 
+  // Skyline Emporium: luxury goods, on the west side.
+  const empPos = stall(g, -92, L, 25, Math.PI / 2, 'SKYLINE EMPORIUM', MAT.neonMagenta, 12);
+  addInteract({ pos: empPos, radius: 2.8, label: 'Trade at the Skyline Emporium', action: 'shop', data: { shop: 'emporium' } });
+  // Parts counter at the speeder dealer.
+  box(g, 92, L, -76, 95, L + 1.1, -70, MAT.metal, { noWalk: true });
+  sign(g, 'PARTS', 93.5, L + 2.6, -73, 3, 0.7, -Math.PI / 2, { fg: '#7feaff', intensity: 2.2 });
+  addInteract({ pos: new THREE.Vector3(90, L, -73), radius: 2.4, label: 'Speeder parts counter', action: 'shop', data: { shop: 'dealerparts' } });
+
   // Gate Run kiosk beside the East Pad bridge.
   box(g, 93, L, -15, 95, L + 1.6, -13, MAT.metal, { noWalk: true });
   const grScr = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.0, 1.6), MAT.neonAmber);
@@ -285,13 +293,17 @@ function market(g) {
   east.forEach(([name, neon], i) => {
     const pos = stall(g, 76, L, -32 + i * 16, -Math.PI / 2, name, neon, 9);
     if (name === 'SKY FRUIT') addInteract({ pos, radius: 2.6, label: 'Buy sky fruit', action: 'food', data: { item: 'fruit' } });
-    if (name === 'DATA CHIPS') addInteract({ pos, radius: 2.6, label: 'Browse the Data Chips stall', action: 'chips' });
+    if (name === 'DATA CHIPS') addInteract({ pos, radius: 2.6, label: 'Trade at Data Chips', action: 'chips' });
+    if (name === 'DROID PARTS') addInteract({ pos, radius: 2.6, label: 'Trade at Droid Parts', action: 'shop', data: { shop: 'droid' } });
+    if (name === 'SPICE MERCHANT') addInteract({ pos, radius: 2.6, label: 'Trade with the Spice Merchant', action: 'shop', data: { shop: 'spice' } });
   });
   const west = [['TAILOR', MAT.neonMagenta], ['GRILL HOUSE', MAT.neonAmber], ['PAWN SHOP', MAT.neonCyan], ['ODDS & ENDS', MAT.neonGreen]];
   west.forEach(([name, neon], i) => {
     const z = [-32, -16, 20, 36][i];
     const pos = stall(g, -76, L, z, Math.PI / 2, name, neon, 9);
     if (name === 'GRILL HOUSE') addInteract({ pos, radius: 2.6, label: 'Buy at Grill House', action: 'food', data: { item: 'skewers' } });
+    const shopId = { TAILOR: 'tailor', 'PAWN SHOP': 'pawn', 'ODDS & ENDS': 'odds' }[name];
+    if (shopId) addInteract({ pos, radius: 2.6, label: `Trade at ${name.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())}`, action: 'shop', data: { shop: shopId } });
   });
   // Vool's Credit, a lender with poor manners.
   const lenderPos = stall(g, -44, L, -76, 0, "VOOL'S CREDIT", MAT.neonMagenta, 10);
@@ -404,6 +416,8 @@ function buildDecks(g, cityDecks) {
     const dropPos = new THREE.Vector3(kx + 3.6, L, kz + 7.6);
     addInteract({ pos: dropPos, radius: 2.6, label: 'Courier terminal', action: 'deck-terminal', data: { deck: d.name } });
     addInteract({ pos: new THREE.Vector3(kx - 3, L, kz + 7), radius: 2.2, label: 'Vending machine', action: 'food', data: { item: 'snack' } });
+    box(g, kx - 2.5, L, kz - 3.2, kx + 2.5, L + 1.1, kz - 2.4, MAT.wood, { noWalk: true });
+    addInteract({ pos: new THREE.Vector3(kx, L, kz - 0.5), radius: 2.4, label: 'Trade with the deck trader', action: 'shop', data: { shop: `deck:${d.name}` } });
     box(g, kx - 4, L, kz + 5.4, kx - 2, L + 2.2, kz + 6.4, MAT.metal, { noWalk: true });
     const vm = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.4, 0.05), neon);
     vm.position.set(kx - 3, L + 1.4, kz + 6.45);
