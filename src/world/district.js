@@ -25,6 +25,19 @@ function levelSlab(g, L, half, mat) {
   slab(g, SHAFT.x0, -half, SHAFT.x1, SHAFT.z0, L, mat);   // in front of the lift
 }
 
+// A floor directory beside each lift landing, with this floor marked.
+function liftDirectory(g, L) {
+  const floors = [
+    [LEVELS.skydeck, 'SKYDECK · VIEWERS'],
+    [LEVELS.residences, 'RESIDENCES · YOUR HOME'],
+    [LEVELS.promenade, 'PROMENADE · CASINO · GUILD · FOOD'],
+    [LEVELS.market, 'MARKET · CANTINA · LOANS'],
+  ];
+  const text = floors.map(([y, name]) => `${y === L ? '▶ ' : ''}${y}  ${name}`).join('\n');
+  box(g, -15.6, L, -55.6, -15.2, L + 4.6, -55.2, MAT.metal, { noWalk: true });
+  sign(g, text, -11.6, L + 2.6, -55.7, 7.5, 3.6, Math.PI, { fg: '#fff2dd', bg: 'rgba(6,10,18,0.85)', border: '#ffc266', size: 46, blur: 2, intensity: 1.6 });
+}
+
 function padWithBridge(g, L, side, half, name, size = 28, bridge = 18) {
   const w = 14;
   const h = size / 2;
@@ -219,6 +232,7 @@ function promenade(g) {
 
   // Elevator landing.
   sign(g, 'LIFT ▲▼', 0, L + 5, -55.4, 8, 1.4, Math.PI, { fg: '#ffc266' });
+  liftDirectory(g, L);
   addInteract({ pos: new THREE.Vector3(10, L, -58), radius: 3, label: 'Call the lift', action: 'lift-call', data: { level: 1 } });
 
   npcZones.push({ x0: -98, x1: 98, z0: -98, z1: 98, y: L, count: 200 });
@@ -282,6 +296,7 @@ function market(g) {
   }
   for (const [x, z] of [[-60, 0], [60, -45], [-60, -50], [50, 50]]) lamp(g, x, L, z);
   sign(g, 'LIFT ▲▼', 0, L + 5, -55.4, 8, 1.4, Math.PI, { fg: '#ffc266' });
+  liftDirectory(g, L);
   addInteract({ pos: new THREE.Vector3(10, L, -58), radius: 3, label: 'Call the lift', action: 'lift-call', data: { level: 0 } });
   npcZones.push({ x0: -84, x1: 84, z0: -84, z1: 48, y: L, count: 190 });
 }
@@ -330,6 +345,7 @@ function residences(g) {
   g.add(pond);
   for (const z of [-30, 30]) { lamp(g, 50, L, z); lamp(g, -50, L, z); }
   sign(g, 'LIFT ▲▼', 0, L + 5, -55.4, 8, 1.4, Math.PI, { fg: '#ffc266' });
+  liftDirectory(g, L);
   addInteract({ pos: new THREE.Vector3(10, L, -58), radius: 3, label: 'Call the lift', action: 'lift-call', data: { level: 2 } });
   npcZones.push({ x0: -68, x1: 68, z0: -68, z1: 40, y: L, count: 34 });
 }
@@ -350,6 +366,7 @@ function skydeck(g) {
   bench(g, -12, L, -70, Math.PI); bench(g, 12, L, -70, Math.PI);
   sign(g, 'SKYDECK 600', 0, L + 0.06, -66, 12, 2, 0, { fg: '#7feaff', blur: 6 }).rotation.x = -Math.PI / 2;
   sign(g, 'LIFT ▲▼', 0, L + 5, -55.4, 8, 1.4, Math.PI, { fg: '#ffc266' });
+  liftDirectory(g, L);
   addInteract({ pos: new THREE.Vector3(10, L, -58), radius: 3, label: 'Call the lift', action: 'lift-call', data: { level: 3 } });
   npcZones.push({ x0: -24, x1: 24, z0: -84, z1: -58, y: L, count: 8 });
 }

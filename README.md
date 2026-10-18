@@ -29,7 +29,13 @@ click again.
 | `E` interact / talk | `Space` rise, `C` descend |
 | `F` board your speeder | `F` land (slow down over a floor first) |
 
-`M` city map · `H` help · `O` settings · `Esc` close a panel or release the mouse.
+`M` map and places · `H` help · `O` settings · `Esc` close a panel or release the mouse.
+
+**Finding your way**: press `M`, pick a place from the list (or click it on
+the map), and follow the pink ◆ marker and light pillar. The banner under the
+compass tells you the next step: take the lift to another level, go to your
+speeder, or land at a particular pad. Each lift landing also has a floor
+directory. Scroll to zoom the map and drag to pan.
 
 Settings (`O`) has mouse sensitivity, inverted flight pitch and graphics
 quality. On **Auto**, the game measures its frame rate and lowers resolution
@@ -116,7 +122,7 @@ camera all query the same hash.
 `window.__game.step()`, which advances the simulation without rendering:
 walking, jumping, railings, the lift and its doors, food, courier jobs,
 flight and collisions, landing, delivery, the casino, Skyrace, rent, falling,
-sleep, settings and automatic quality.
+sleep, settings, wayfinding and automatic quality.
 
 ```sh
 npm run build && npm run preview     # terminal 1

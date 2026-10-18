@@ -24,7 +24,7 @@ import { Speeder, SPEEDER_MODELS } from './player/speeder.js';
 import { CameraRig } from './player/cameraRig.js';
 import { state, tick, hooks, addCredits, bodySpeedMul, totalMinutes } from './systems/state.js';
 import { interactables, nearestInteract, npcZones, zoneAt, pads } from './systems/interact.js';
-import { jobTarget, minutesLeft, GUILD } from './systems/jobs.js';
+import { minutesLeft, GUILD } from './systems/jobs.js';
 import { saveGame, loadGame } from './systems/save.js';
 import * as acts from './systems/activities.js';
 import { settings, loadSettings, saveSettings, QUALITY } from './systems/settings.js';
@@ -32,7 +32,8 @@ import { openRoulette, openBlackjack, openSlots, openDice } from './casino/games
 import { createSkyrace } from './casino/races.js';
 import { openPanel, closePanel, isPanelOpen, onPanel, h } from './ui/panel.js';
 import { updateHUD, toast, showLocation, setPrompt, speech } from './ui/hud.js';
-import { initMap, drawMap } from './ui/map.js';
+import { initMap, drawMap, setupMap } from './ui/map.js';
+import { nav, buildPlaces, guidance, arrived, setTarget, clearTarget } from './systems/nav.js';
 import { initAudio, updateAudio, sfx } from './audio/audio.js';
 
 const params = new URLSearchParams(location.search);
@@ -146,10 +147,20 @@ async function build() {
   const rig = new CameraRig(camera);
   const race = createSkyrace(scene, district.raceBoard, sfx, toast);
   const flyers = createFlyers(scene);
+  // A pillar of light standing on the waypoint, visible from far away.
+  const beacon = new THREE.Mesh(
+    new THREE.CylinderGeometry(1, 1, 1, 16, 1, true).translate(0, 0.5, 0),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color(2.4, 0.7, 1.6), transparent: true, opacity: 0.35, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide })
+  );
+  beacon.visible = false;
+  scene.add(beacon);
   initMap(city.segs);
+  nav.places = buildPlaces(speeder);
+  mapUI = setupMap($('mapcanvas'), $('placelist'), pickPlace);
+  $('map-center').onclick = () => mapUI.recenter();
   await step(92, 'Compiling shaders…');
 
-  G = { city, district, traffic, ads, atmosphere, crowd, walker, speeder, rig, race, flyers, elevator: district.elevator };
+  G = { beacon, city, district, traffic, ads, atmosphere, crowd, walker, speeder, rig, race, flyers, elevator: district.elevator };
 
   // Place the player (from a save, or fresh on the promenade).
   const extra = loadGame();
@@ -472,7 +483,6 @@ function update(dt) {
   void elev;
 
   // Toggles.
-  if (pressed('KeyM')) { mapOpen = !mapOpen; $('mapview').classList.toggle('hidden', !mapOpen); }
   if (pressed('KeyH')) { helpOpen = !helpOpen; $('help').classList.toggle('hidden', !helpOpen); }
   if (pressed('KeyO')) openSettings();
 
@@ -551,6 +561,23 @@ function update(dt) {
     wheelSpin *= 1 - Math.min(1, dt * 0.6);
   }
 
+  // Wayfinding.
+  const guide = guidance(focus, mode, s, mode === 'walk' && el.containsPlayer(w.pos));
+  if (arrived(w.pos, mode)) {
+    toast(`You've arrived: ${nav.target.name}.`, 'win', 3500);
+    sfx('deliver');
+    clearTarget();
+  }
+
+  if (guide) {
+    const d = camera.position.distanceTo(guide.pos);
+    const r = Math.max(0.8, d * 0.004);
+    G.beacon.visible = true;
+    G.beacon.position.copy(guide.pos);
+    G.beacon.scale.set(r, Math.max(14, d * 0.25), r);
+    G.beacon.material.opacity = 0.25 + 0.12 * Math.sin(elapsed * 3);
+  } else G.beacon.visible = false;
+
   // HUD (a little less often than every frame).
   hudTimer -= dt;
   setPrompt(prompt);
@@ -562,7 +589,7 @@ function update(dt) {
       camera,
       mode,
       speeder: s,
-      jobTarget: jobTarget(),
+      guide,
       jobLeft: minutesLeft(),
       landmarks: [
         { x: 0, z: 0, icon: '▲', cls: 'hub' },
@@ -576,11 +603,12 @@ function update(dt) {
   }
   if (mapOpen) {
     const f = mode === 'fly' ? new THREE.Vector3(Math.sin(s.yaw), 0, Math.cos(s.yaw)) : new THREE.Vector3(Math.sin(w.facing), 0, Math.cos(w.facing));
-    drawMap($('mapcanvas'), {
-      player: { x: focus.x, z: focus.z, heading: Math.atan2(f.x, -f.z) },
+    drawMap({
+      player: { x: focus.x, y: focus.y, z: focus.z, heading: Math.atan2(f.x, -f.z) },
       speeder: s,
-      job: state.job,
       flying: mode === 'fly',
+      places: nav.places,
+      target: nav.target || (state.job ? { name: state.job.dest } : null),
     });
   }
 
@@ -621,10 +649,10 @@ function frame() {
   fpsTime += dt;
   if (fpsTime > 1) { window.__fps = fpsFrames / fpsTime; fpsFrames = 0; fpsTime = 0; }
   if (G && started) {
-    paused = !input.locked && !input.lockFailed && !isPanelOpen() && !params.has('nolock');
+    paused = !input.locked && !input.lockFailed && !isPanelOpen() && !mapOpen && !params.has('nolock');
     $('pause').classList.toggle('hidden', !paused || mapOpen || helpOpen);
     const t0 = performance.now();
-    if (!paused || isPanelOpen()) update(dt);
+    if (!paused || isPanelOpen() || mapOpen) update(dt);
     else ENV.uTime.value = elapsed;
     window.__perf = window.__perf || { update: 0, render: 0 };
     window.__perf.update = performance.now() - t0;
@@ -664,7 +692,32 @@ canvas.addEventListener('click', () => {
 $('pause').addEventListener('click', () => requestLock(canvas));
 addEventListener('keydown', (e) => {
   if (e.code === 'Escape' && isPanelOpen()) closePanel();
+  else if (e.code === 'Escape' && mapOpen) closeMap();
+  else if (e.code === 'KeyM' && started && !isPanelOpen()) (mapOpen ? closeMap() : openMap());
 });
+
+// The map takes the mouse while it is open; the world keeps running.
+let mapUI = null;
+function openMap() {
+  mapOpen = true;
+  $('mapview').classList.remove('hidden');
+  mapUI.recenter();
+  mapUI.fillList(nav.places);
+  input.enabled = false;
+  if (document.pointerLockElement) document.exitPointerLock();
+}
+function closeMap() {
+  mapOpen = false;
+  $('mapview').classList.add('hidden');
+  input.enabled = true;
+  requestLock(canvas);
+}
+function pickPlace(place) {
+  setTarget(place);
+  sfx('click');
+  toast(`Waypoint set: ${place.name}. Follow the ◆ marker.`, 'info', 3500);
+  closeMap();
+}
 
 function begin(fresh) {
   if (fresh) {
@@ -679,7 +732,7 @@ function begin(fresh) {
   if (!G.resumed || fresh) {
     setTimeout(() => toast('Welcome to the city. You have 500 credits, a speeder on the East Pad, and rent due at 06:00.', 'info', 8000), 600);
     setTimeout(() => toast('Earn credits at the Courier Guild (south-west). Spend them at the Lucky Comet Casino (north-east).', 'info', 8000), 3500);
-    setTimeout(() => toast('Your apartment is up the glass lift on the Spire\'s south face. Press H for controls.', 'info', 8000), 7000);
+    setTimeout(() => toast('Lost? Press M for the map and a list of places. Pick one and follow the ◆ marker: it tells you when to take the lift or fly.', 'info', 9000), 7000);
   } else {
     toast(`Welcome back. Day ${state.day}, ${state.credits} cr.`, 'info', 5000);
   }
@@ -704,6 +757,8 @@ build().then((extra) => {
     // Advance the simulation without rendering (for automated tests).
     step: (n, dt = 1 / 30) => { for (let i = 0; i < n; i++) { update(dt); endFrame(); } },
     doAction: (action, data) => doAction({ action, data }),
-    nearest: () => nearestInteract(G.walker.pos), setMode: (m) => (m === 'fly' ? boardSpeeder() : exitSpeeder()), begin, world, interactables, get mode() { return mode; }, get quality() { return QUALITY[qualityLevel].name; }, openSettings, totalMinutes };
+    nearest: () => nearestInteract(G.walker.pos),
+    nav, openMap, closeMap,
+    guide: () => guidance(mode === 'fly' ? G.speeder.pos : G.walker.pos, mode, G.speeder, mode === 'walk' && G.elevator.containsPlayer(G.walker.pos)), setMode: (m) => (m === 'fly' ? boardSpeeder() : exitSpeeder()), begin, world, interactables, get mode() { return mode; }, get quality() { return QUALITY[qualityLevel].name; }, openSettings, totalMinutes };
 });
 requestAnimationFrame(frame);

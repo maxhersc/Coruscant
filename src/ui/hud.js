@@ -55,11 +55,12 @@ export function speech(who, line) {
 }
 
 const _v = new THREE.Vector3();
+const _c = new THREE.Vector3();
 const COMPASS = [
   ['N', 0], ['NE', 45], ['E', 90], ['SE', 135], ['S', 180], ['SW', 225], ['W', 270], ['NW', 315],
 ];
 
-export function updateHUD({ camera, mode, speeder, jobTarget, jobLeft, landmarks }) {
+export function updateHUD({ camera, mode, speeder, guide, jobLeft, landmarks }) {
   $('clock').textContent = clockString();
   $('day').textContent = `Day ${state.day}`;
   if (lastCredits !== state.credits) {
@@ -104,8 +105,8 @@ export function updateHUD({ camera, mode, speeder, jobTarget, jobLeft, landmarks
     const deg = (Math.atan2(lm.x - cam.x, cam.z - lm.z) * 180) / Math.PI;
     place(deg, lm.icon, 'mark ' + (lm.cls || ''));
   }
-  if (jobTarget) {
-    const deg = (Math.atan2(jobTarget.x - cam.x, cam.z - jobTarget.z) * 180) / Math.PI;
+  if (guide) {
+    const deg = (Math.atan2(guide.pos.x - cam.x, cam.z - guide.pos.z) * 180) / Math.PI;
     place(deg, '◆', 'mark job');
   }
   strip.innerHTML = html;
@@ -113,7 +114,7 @@ export function updateHUD({ camera, mode, speeder, jobTarget, jobLeft, landmarks
   // Job card and waypoint.
   const card = $('job');
   const wp = $('waypoint');
-  if (state.job && jobTarget) {
+  if (state.job) {
     card.classList.add('show');
     card.querySelector('.job-cargo').textContent = state.job.cargo + (state.job.fragile ? ' · fragile' : '');
     card.querySelector('.job-dest').textContent = `→ ${state.job.dest}`;
@@ -123,19 +124,40 @@ export function updateHUD({ camera, mode, speeder, jobTarget, jobLeft, landmarks
     tEl.textContent = `${left < 0 ? 'LATE ' : ''}${m}h ${String(s).padStart(2, '0')}m`;
     tEl.classList.toggle('late', left < 0);
     card.querySelector('.job-pay').textContent = `${state.job.pay} cr`;
-    const dist = cam.distanceTo(jobTarget);
-    _v.copy(jobTarget).project(camera);
-    const behind = _v.z > 1;
+  } else card.classList.remove('show');
+
+  // Waypoint marker and the next step toward it.
+  const gd = $('guide');
+  if (guide) {
+    gd.querySelector('.guide-to').textContent = `◆ ${guide.label}`;
+    gd.querySelector('.guide-step').textContent = guide.step || '';
+    gd.classList.add('show');
+    const dist = cam.distanceTo(guide.pos);
+    // In view: the marker sits on the target. Off screen or behind: it rides
+    // the screen edge with an arrow showing which way to turn.
+    _c.copy(guide.pos).applyMatrix4(camera.matrixWorldInverse);
+    _v.copy(guide.pos).project(camera);
     let x = (_v.x * 0.5 + 0.5) * innerWidth, y = (-_v.y * 0.5 + 0.5) * innerHeight;
-    if (behind) { x = innerWidth - x; y = innerHeight - 40; }
-    x = THREE.MathUtils.clamp(x, 30, innerWidth - 30);
-    y = THREE.MathUtils.clamp(y, 60, innerHeight - 40);
+    const onScreen = _c.z < 0 && x > 40 && x < innerWidth - 40 && y > 70 && y < innerHeight - 50;
+    wp.classList.toggle('edge', !onScreen);
+    if (!onScreen) {
+      let dx = _c.x, dy = -_c.y;
+      if (_c.z > 0 && Math.abs(dx) < 1e-3) dx = 1;
+      if (_c.z > 0) dy = Math.max(dy, 0); // behind: point along the bottom edge
+      const len = Math.hypot(dx, dy) || 1;
+      dx /= len; dy /= len;
+      const rx = innerWidth / 2 - 50, ry = innerHeight / 2 - 70;
+      const k = Math.min(rx / Math.max(Math.abs(dx), 1e-3), ry / Math.max(Math.abs(dy), 1e-3));
+      x = innerWidth / 2 + dx * k;
+      y = innerHeight / 2 + dy * k;
+      wp.querySelector('.wp-arrow').style.transform = `rotate(${Math.atan2(dy, dx)}rad)`;
+    }
     wp.style.transform = `translate(${x}px, ${y}px)`;
     wp.querySelector('.wp-dist').textContent = dist > 1000 ? `${(dist / 1000).toFixed(1)} km` : `${Math.round(dist)} m`;
     wp.classList.add('show');
   } else {
-    card.classList.remove('show');
     wp.classList.remove('show');
+    gd.classList.remove('show');
   }
 }
 

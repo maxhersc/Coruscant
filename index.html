@@ -39,16 +39,24 @@
       <div id="location"><div class="loc-name"></div><div class="loc-sub"></div></div>
       <div id="prompt"></div>
       <div id="speech"></div>
-      <div id="waypoint"><div class="wp-diamond">◆</div><div class="wp-dist"></div></div>
+      <div id="waypoint"><div class="wp-diamond">◆</div><div class="wp-arrow">➤</div><div class="wp-dist"></div></div>
+      <div id="guide"><div class="guide-to"></div><div class="guide-step"></div></div>
       <div id="toasts"></div>
-      <div id="hint">[H] Help · [M] Map · [O] Settings</div>
+      <div id="hint">[M] Map &amp; places · [H] Help · [O] Settings</div>
     </div>
 
     <div id="panel" class="panel"></div>
 
     <div id="mapview" class="overlay hidden">
-      <canvas id="mapcanvas"></canvas>
-      <div class="map-legend">City map · ◆ job · ▪ rooftop decks · press M to close</div>
+      <div class="map-main">
+        <canvas id="mapcanvas"></canvas>
+        <div class="map-legend">Scroll to zoom · drag to pan · click a place to set a waypoint · <button id="map-center" class="btn chip">Centre on me</button> · M or Esc to close</div>
+      </div>
+      <aside class="map-side">
+        <h2>Places</h2>
+        <p class="muted">Pick one and follow the ◆ marker. It tells you when to take the lift or fly.</p>
+        <div id="placelist"></div>
+      </aside>
     </div>
 
     <div id="help" class="overlay hidden">
@@ -71,7 +79,7 @@
             <h3>Life</h3>
             <p>Eat and sleep or you slow down. Rent is due every morning at 06:00.</p>
             <p>Earn credits as a courier at the Guild. Lose them at the Lucky Comet.</p>
-            <p><kbd>M</kbd> map · <kbd>H</kbd> help · <kbd>O</kbd> settings · <kbd>Esc</kbd> release mouse</p>
+            <p><kbd>M</kbd> map and places (set a waypoint) · <kbd>H</kbd> help · <kbd>O</kbd> settings · <kbd>Esc</kbd> release mouse</p>
           </div>
         </div>
         <p class="muted">Press H to close.</p>

@@ -257,7 +257,39 @@ r = await ev(() => ({ sens: window.__game.input.sensitivity, panel: !!document.q
 check('settings change mouse sensitivity', r.sens === 2 && r.panel, JSON.stringify(r));
 await page.keyboard.press('Escape');
 
-// 18. Auto quality steps down when frames are slow (a software renderer is).
+// 18. Wayfinding: the map lists places, picking one sets a waypoint, and the
+// guide sends you to the lift when the place is on another level.
+r = await ev(() => {
+  const g = window.__game;
+  if (g.mode === 'fly') g.setMode('walk');
+  g.G.walker.place(0, 440, -62, 0); // residences, by the lift
+  g.openMap();
+  return { places: document.querySelectorAll('#placelist .place').length };
+});
+await page.click('#placelist .place:has-text("Lucky Comet Casino")');
+r = await ev(() => {
+  const g = window.__game;
+  const target = g.nav.target && g.nav.target.name;
+  const mapHidden = document.getElementById('mapview').classList.contains('hidden');
+  const step = g.guide().step;
+  // Arrive at the casino.
+  g.G.walker.place(62, 300, 78, 0);
+  g.step(2);
+  return { target, mapHidden, step, after: g.nav.target };
+});
+check('pick a place from the map', r.target === 'Lucky Comet Casino' && r.mapHidden, JSON.stringify(r.target));
+check('guide sends you to the lift from another level', /lift/i.test(r.step || ''), r.step);
+check('arriving clears the waypoint', r.after === null, String(r.after));
+r = await ev(() => {
+  const g = window.__game;
+  g.nav.target = g.nav.places.find((p) => p.group === 'Rooftop decks');
+  const step = g.guide().step;
+  g.nav.target = null;
+  return step;
+});
+check('guide sends you to your speeder for a far deck', /speeder|F to board/i.test(r || ''), r);
+
+// 19. Auto quality steps down when frames are slow (a software renderer is).
 // Its own page, without ?low, so it starts at high.
 {
   await page.close();
