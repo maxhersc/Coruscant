@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { stdMat, glowMat, patchFog } from './env.js';
+import { stdMat, glowMat, patchFog, ENV } from './env.js';
 import { world } from '../core/collision.js';
 
 // Shared prop materials and builders for the walkable districts. Every solid
@@ -34,7 +34,7 @@ function tileTexture(base, line, size = 512, tiles = 4) {
 
 export const MAT = {};
 export function initMaterials() {
-  MAT.floor = stdMat(0xffffff, { map: tileTexture('#8d8a84', '#6c6964'), roughness: 0.45, metalness: 0.15 });
+  MAT.floor = stdMat(0xffffff, { map: tileTexture('#8d8a84', '#6c6964'), roughness: 0.3, metalness: 0.3 });
   MAT.floorDark = stdMat(0xffffff, { map: tileTexture('#4d4a48', '#2f2d2c'), roughness: 0.7 });
   MAT.floorWarm = stdMat(0xffffff, { map: tileTexture('#7a5a44', '#4a3528', 512, 8), roughness: 0.5 });
   MAT.under = stdMat(0x2a2a2e, { roughness: 0.9 });
@@ -55,7 +55,47 @@ export function initMaterials() {
   MAT.neonGreen = glowMat(0x55ff88, 4);
   MAT.neonWhite = glowMat(0xfff2dd, 3);
   MAT.lampGlow = glowMat(0xffd9a0, 5);
+  // Ceiling panels light a room without flooding it with bloom.
+  MAT.ceilWhite = glowMat(0xfff2dd, 0.9);
+  MAT.ceilMagenta = glowMat(0xff66b3, 0.9);
+  MAT.ceilAmber = glowMat(0xffb35a, 0.9);
   MAT.railGlow = glowMat(0x33ddff, 1.4);
+  // Soft cones of light under street lamps: brightest at the bulb, fading to
+  // nothing at the ground and at the cone's edges, and only at night.
+  MAT.lampCone = new THREE.ShaderMaterial({
+    uniforms: { uNight: ENV.uNight },
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
+    vertexShader: /* glsl */ `
+      #include <common>
+      #include <logdepthbuf_pars_vertex>
+      varying float vUp;
+      varying vec3 vN;
+      varying vec3 vView;
+      void main() {
+        vUp = uv.y;
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vN = normalize(mat3(modelMatrix) * normal);
+        vView = normalize(cameraPosition - wp.xyz);
+        gl_Position = projectionMatrix * viewMatrix * wp;
+        #include <logdepthbuf_vertex>
+      }`,
+    fragmentShader: /* glsl */ `
+      #include <common>
+      #include <logdepthbuf_pars_fragment>
+      uniform float uNight;
+      varying float vUp;
+      varying vec3 vN;
+      varying vec3 vView;
+      void main() {
+        float edge = pow(abs(dot(normalize(vN), normalize(vView))), 2.0);
+        float a = pow(clamp(vUp, 0.0, 1.0), 1.6) * edge * 0.045 * uNight;
+        gl_FragColor = vec4(vec3(1.0, 0.75, 0.45) * a, a);
+        #include <logdepthbuf_fragment>
+      }`,
+  });
   MAT.padGlow = glowMat(0xffaa33, 1.6);
   MAT.padLight = glowMat(0x55ff88, 2.2);
   MAT.neonCyan.userData.css = '#7feaff';
@@ -227,6 +267,9 @@ export function lamp(parent, x, y, z) {
   const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.35, 12, 8), MAT.lampGlow);
   bulb.position.set(x, y + 4.4, z);
   parent.add(bulb);
+  const cone = new THREE.Mesh(new THREE.ConeGeometry(2.4, 4.3, 18, 1, true), MAT.lampCone);
+  cone.position.set(x, y + 2.15, z);
+  parent.add(cone);
 }
 
 export function planter(parent, x, y, z, r = 1.6) {
@@ -298,7 +341,7 @@ export function room(parent, x0, z0, x1, z1, y, h, mat, doors = [], opts = {}) {
   }
   // Ceiling light panels.
   if (opts.ceilingLights !== false) {
-    const panel = new THREE.Mesh(new THREE.BoxGeometry((x1 - x0) * 0.6, 0.1, (z1 - z0) * 0.6), opts.ceilMat || MAT.neonWhite);
+    const panel = new THREE.Mesh(new THREE.BoxGeometry((x1 - x0) * 0.6, 0.1, (z1 - z0) * 0.6), opts.ceilMat || MAT.ceilWhite);
     panel.position.set((x0 + x1) / 2, y + h - 0.1, (z0 + z1) / 2);
     parent.add(panel);
   }

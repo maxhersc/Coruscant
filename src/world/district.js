@@ -106,7 +106,7 @@ function promenade(g) {
   addZone('Spire Promenade', 'Level 300 · Upper City', -160, L - 3, -160, 160, L + 40, 160, 1);
 
   // Lucky Comet Casino (north-east).
-  room(g, 48, 48, 96, 96, L, 10, MAT.wallDark, [{ side: 'w', at: 72, width: 8 }, { side: 's', at: 72, width: 8 }], { ceilMat: MAT.neonMagenta, frameMat: MAT.neonMagenta });
+  room(g, 48, 48, 96, 96, L, 10, MAT.wallDark, [{ side: 'w', at: 72, width: 8 }, { side: 's', at: 72, width: 8 }], { ceilMat: MAT.ceilMagenta, frameMat: MAT.neonMagenta });
   box(g, 48.3, L, 48.3, 95.7, L + 0.05, 95.7, MAT.floorWarm, { tile: 3 });
   sign(g, 'LUCKY COMET\nCASINO', 72, L + 7, 47.6, 22, 5, Math.PI, { fg: '#ff7ac0', glyphs: false });
   sign(g, 'LUCKY COMET', 47.6, L + 7, 72, 20, 3.4, -Math.PI / 2, { fg: '#ff7ac0', glyphs: true });
@@ -187,7 +187,6 @@ function promenade(g) {
   g.add(termScr);
   void term;
   addInteract({ pos: new THREE.Vector3(-78.5, L, -63.5), radius: 2.8, label: 'Courier job board', action: 'jobs' });
-  addInteract({ pos: new THREE.Vector3(-76, L, -86), radius: 3, label: 'Talk to the dispatcher', action: 'talk', data: { who: 'dispatcher' } });
   addZone('Courier Guild', 'Deliveries across the city', -96, L - 1, -96, -56, L + 7, -70, 4);
 
   // Speeder dealer (south-east).
@@ -230,6 +229,14 @@ function promenade(g) {
   g.add(door);
   sign(g, 'THE SPIRE', 0, L + 10, 40.3, 18, 2.6, 0, { fg: '#fff2dd', glyphs: true });
 
+  // Gate Run kiosk beside the East Pad bridge.
+  box(g, 93, L, -15, 95, L + 1.6, -13, MAT.metal, { noWalk: true });
+  const grScr = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.0, 1.6), MAT.neonAmber);
+  grScr.position.set(92.95, L + 2.0, -14);
+  g.add(grScr);
+  sign(g, 'GATE RUN', 94, L + 3.4, -14, 4, 0.9, -Math.PI / 2, { fg: '#ffc266', intensity: 2.4 });
+  addInteract({ pos: new THREE.Vector3(91, L, -14), radius: 2.6, label: 'Gate Run time trial', action: 'gaterun' });
+
   // Elevator landing.
   sign(g, 'LIFT ▲▼', 0, L + 5, -55.4, 8, 1.4, Math.PI, { fg: '#ffc266' });
   liftDirectory(g, L);
@@ -249,7 +256,7 @@ function market(g) {
   addZone('Galleria Market', 'Level 160 · Mid City', -130, L - 3, -130, 130, L + 30, 130, 1);
 
   // The Low Orbit cantina.
-  room(g, -30, 50, 30, 82, L, 8, MAT.wallDark, [{ side: 's', at: 0, width: 8 }], { ceilMat: MAT.neonAmber, frameMat: MAT.neonAmber });
+  room(g, -30, 50, 30, 82, L, 8, MAT.wallDark, [{ side: 's', at: 0, width: 8 }], { ceilMat: MAT.ceilAmber, frameMat: MAT.neonAmber });
   box(g, -29.7, L, 50.3, 29.7, L + 0.05, 81.7, MAT.floorWarm, { tile: 2 });
   sign(g, 'THE LOW ORBIT', 0, L + 6, 49.6, 20, 3, Math.PI, { fg: '#ffc266', glyphs: true, intensity: 2.8 });
   box(g, -20, L, 73, 20, L + 1.15, 75, MAT.wood, { noWalk: true });
@@ -278,6 +285,7 @@ function market(g) {
   east.forEach(([name, neon], i) => {
     const pos = stall(g, 76, L, -32 + i * 16, -Math.PI / 2, name, neon, 9);
     if (name === 'SKY FRUIT') addInteract({ pos, radius: 2.6, label: 'Buy sky fruit', action: 'food', data: { item: 'fruit' } });
+    if (name === 'DATA CHIPS') addInteract({ pos, radius: 2.6, label: 'Browse the Data Chips stall', action: 'chips' });
   });
   const west = [['TAILOR', MAT.neonMagenta], ['GRILL HOUSE', MAT.neonAmber], ['PAWN SHOP', MAT.neonCyan], ['ODDS & ENDS', MAT.neonGreen]];
   west.forEach(([name, neon], i) => {
@@ -287,7 +295,7 @@ function market(g) {
   });
   // Vool's Credit, a lender with poor manners.
   const lenderPos = stall(g, -44, L, -76, 0, "VOOL'S CREDIT", MAT.neonMagenta, 10);
-  addInteract({ pos: lenderPos, radius: 2.8, label: "Vool's Credit (loans)", action: 'loan' });
+  void lenderPos; // Vool himself takes loan requests (story/people.js).
   lightStrings(g, L, [[-85, -60, 85, -60, 7], [-85, -20, 85, -20, 7.5], [-85, 20, 85, 20, 7], [44, -85, 44, 85, 8], [-44, -85, -44, 85, 8]]);
   for (const [x, z] of [[60, 0], [-60, 0], [0, -70]]) {
     const glow = new THREE.PointLight(0xffb070, 900, 90, 2);
@@ -309,7 +317,7 @@ function residences(g) {
   addZone('Skyhaven Residences', 'Level 440 · Your home', -110, L - 3, -110, 110, L + 30, 110, 1);
 
   // Three apartments; the middle one is yours.
-  room(g, -40, 44, 40, 68, L, 7, MAT.wall, [{ side: 's', at: 0, width: 3 }, { side: 'n', at: 0, width: 10 }], { ceilMat: MAT.neonWhite });
+  room(g, -40, 44, 40, 68, L, 7, MAT.wall, [{ side: 's', at: 0, width: 3 }, { side: 'n', at: 0, width: 10 }], { ceilMat: MAT.ceilWhite });
   rail(g, -5, 68, 5, 68, L, 3.6); // the window
   box(g, -14.25, L, 44, -13.75, L + 7, 68, MAT.wall, { noWalk: true });
   box(g, 13.75, L, 44, 14.25, L + 7, 68, MAT.wall, { noWalk: true });
@@ -387,7 +395,7 @@ function buildDecks(g, cityDecks) {
     // Kiosk with the drop-off terminal.
     const kx = x0 + 9, kz = z0 + 8;
     const neon = rng.pick(neons);
-    room(g, kx - 6, kz - 5, kx + 6, kz + 5, L, 4.5, MAT.wallDark, [{ side: 'n', at: kx, width: 3 }], { ceilMat: neon, frameMat: neon });
+    room(g, kx - 6, kz - 5, kx + 6, kz + 5, L, 4.5, MAT.wallDark, [{ side: 'n', at: kx, width: 3 }], { ceilMat: MAT.ceilWhite, frameMat: neon });
     sign(g, d.name.toUpperCase(), kx, L + 5.6, kz + 5.3, 12, 1.5, 0, { fg: neon.userData.css, glyphs: true, intensity: 2.6 });
     box(g, kx + 3, L, kz + 5.4, kx + 4.2, L + 1.5, kz + 6.2, MAT.metal, { noWalk: true });
     const sc = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.7, 0.05), MAT.neonGreen);

@@ -32,6 +32,7 @@ export function openFood(item, ctx) {
             state.hunger = Math.min(100, state.hunger + food);
             state.energy = Math.max(0, Math.min(100, state.energy + energy));
             ctx.sfx('coin');
+            ctx.event?.('bought', { item });
             msg.textContent = `You enjoy the ${name.toLowerCase()}. Hunger ${Math.round(state.hunger)} · Energy ${Math.round(state.energy)}`;
           },
         }, `${price} cr`)
@@ -123,6 +124,7 @@ export function openJobs(from, ctx) {
       if (j && j.dest === from) {
         const r = deliver();
         ctx.sfx('deliver');
+        ctx.event?.('delivered');
         ctx.toast(`Delivered ${r ? '' : ''}for ${r.pay} cr. ${r.note}`, 'win', 6000);
         body.append(h('div.result', {}, h('b.good', {}, `Delivery complete: +${r.pay} cr`), h('div.muted', {}, r.note)));
       } else if (j) {

@@ -30,16 +30,19 @@ export function createSkyrace(scene, raceBoard, sfx, toast) {
   const curve = new THREE.CatmullRomCurve3(pts, true, 'centripetal');
   const length = curve.getLength();
 
-  // Holo gates along the course.
-  const gateMat = glowMat(0x33ddff, 2.5);
+  // Holo gates along the course. Each has its own material so the Gate Run
+  // can light the next one.
+  const gates = [];
   for (let i = 0; i < 12; i++) {
     const u = i / 12;
     const p = curve.getPointAt(u);
     const t = curve.getTangentAt(u);
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(16, 0.35, 6, 40), gateMat);
+    const mat = glowMat(0x33ddff, 2.5);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(16, 0.35, 6, 40), mat);
     ring.position.copy(p);
     ring.lookAt(p.clone().add(t));
     scene.add(ring);
+    gates.push({ mesh: ring, pos: p.clone(), base: mat.color.clone() });
   }
 
   const trailMat = glowMat(0xffffff, 2);
@@ -269,5 +272,5 @@ export function createSkyrace(scene, raceBoard, sfx, toast) {
     return `SKYRACE #${race.number} · LAP ${lap}/${LAPS} · ` + sorted.slice(0, 3).map((r, i) => `${i + 1}. ${r.name}`).join('  ');
   };
 
-  return { race, update, openBetting, tickerText };
+  return { race, update, openBetting, tickerText, gates, courseLength: length };
 }

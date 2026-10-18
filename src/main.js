@@ -12,7 +12,7 @@ import { createSky } from './world/sky.js';
 import { generateCity, buildCityMeshes } from './world/city.js';
 import { buildLandmarks, isLandmarkCell, LANDMARKS } from './world/landmarks.js';
 import { buildDistrict, isHubCell } from './world/district.js';
-import { initMaterials } from './world/props.js';
+import { initMaterials, MAT } from './world/props.js';
 import { createTraffic, nearestCraft } from './world/traffic.js';
 import { createBeacons } from './world/beacons.js';
 import { createAds } from './world/ads.js';
@@ -30,6 +30,10 @@ import * as acts from './systems/activities.js';
 import { settings, loadSettings, saveSettings, QUALITY } from './systems/settings.js';
 import { openRoulette, openBlackjack, openSlots, openDice } from './casino/games.js';
 import { createSkyrace } from './casino/races.js';
+import { createGateRun } from './casino/gaterun.js';
+import { buildUndercity } from './world/undercity.js';
+import { createPeople } from './story/people.js';
+import * as story from './story/story.js';
 import { openPanel, closePanel, isPanelOpen, onPanel, h } from './ui/panel.js';
 import { updateHUD, toast, showLocation, setPrompt, speech } from './ui/hud.js';
 import { initMap, drawMap, setupMap } from './ui/map.js';
@@ -65,6 +69,8 @@ composer.addPass(new OutputPass());
 
 // Quality: a fixed level, or 'auto', which steps down when frames run slow
 // and back up when there is headroom.
+let G = null; // everything built, filled by build()
+let envRT = null, envNight = -1; // the reflection map and the night level it was taken at
 let qualityLevel = LOW ? 2 : settings.quality === 'auto' ? 0 : Math.max(0, QUALITY.findIndex((q) => q.name === settings.quality));
 function applyQuality(level) {
   qualityLevel = level;
@@ -74,6 +80,9 @@ function applyQuality(level) {
   composer.setPixelRatio(Math.min(devicePixelRatio, q.pixelRatio));
   composer.setSize(innerWidth, innerHeight);
   bloom.enabled = q.bloom && !params.has('nobloom');
+  // Reflections cost every lit pixel a lookup; the low level goes without.
+  if (G) applyReflections(q.reflections && envRT ? envRT.texture : null);
+  if (q.reflections && !envRT) envNight = -1; // take one on the next frame
 }
 applyQuality(qualityLevel);
 const autoQ = { frames: 0, time: 0, slow: 0, fast: 0, last: performance.now() };
@@ -116,7 +125,6 @@ const step = async (pct, text) => {
   await new Promise((r) => setTimeout(r, 16));
 };
 
-let G = null; // everything built, filled by build()
 
 async function build() {
   await step(5, 'Pouring foundations…');
@@ -126,6 +134,8 @@ async function build() {
   scene.add(buildLandmarks(world, city.segs, city.beacons));
   const district = buildDistrict(city.segs, city.decks, city.beacons);
   scene.add(district.group);
+  const shelf = buildUndercity();
+  scene.add(shelf.group);
   await step(40, 'Lighting the windows…');
   scene.add(buildCityMeshes(city.segs));
   scene.add(buildCityMeshes(city.far));
@@ -147,6 +157,19 @@ async function build() {
   const rig = new CameraRig(camera);
   const race = createSkyrace(scene, district.raceBoard, sfx, toast);
   const flyers = createFlyers(scene);
+  const gaterun = createGateRun(race.gates, race.courseLength, sfx, toast);
+  const people = createPeople(scene, {
+    openLoan: () => acts.openLoan(ctx),
+    openBlackjack: () => openBlackjack(sfx),
+    escape: () => startEscape(),
+  }, shelf);
+  story.where.board = new THREE.Vector3(-78.5, LEVELS.promenade, -63.5);
+  story.where.chips = new THREE.Vector3(72.8, LEVELS.market, 32);
+  story.where.shelf = shelf.center;
+  story.where.cache = shelf.cachePos.clone().add(new THREE.Vector3(0, 0, -2));
+  story.setStoryHooks({ toast, sfx });
+  nav.before = () => gaterun.target();
+  nav.after = () => story.storyTarget();
   // A pillar of light standing on the waypoint, visible from far away.
   const beacon = new THREE.Mesh(
     new THREE.CylinderGeometry(1, 1, 1, 16, 1, true).translate(0, 0.5, 0),
@@ -155,12 +178,15 @@ async function build() {
   beacon.visible = false;
   scene.add(beacon);
   initMap(city.segs);
-  nav.places = buildPlaces(speeder);
+  nav.places = buildPlaces(speeder, [
+    ...people.people.filter((p) => !p.visible).map((p) => ({ name: p.name, get pos() { return p.talkAt || p.pos; }, group: 'People', hint: p.title, level: Math.hypot(p.pos.x, p.pos.z) < 170 ? p.pos.y : undefined })),
+    { name: 'Undercity Shelf', pos: shelf.center, group: 'Hidden places', hint: 'An old platform below the clouds' },
+  ]);
   mapUI = setupMap($('mapcanvas'), $('placelist'), pickPlace);
   $('map-center').onclick = () => mapUI.recenter();
   await step(92, 'Compiling shaders…');
 
-  G = { beacon, city, district, traffic, ads, atmosphere, crowd, walker, speeder, rig, race, flyers, elevator: district.elevator };
+  G = { beacon, city, district, traffic, ads, atmosphere, crowd, walker, speeder, rig, race, flyers, gaterun, people, shelf, elevator: district.elevator };
 
   // Place the player (from a save, or fresh on the promenade).
   const extra = loadGame();
@@ -178,11 +204,59 @@ async function build() {
 
   // Warm up: one render compiles every program before the player sees it.
   updateEnvironment(state.minutes, sun, hemi);
+  refreshReflections();
   rig.walk(0, walker.pos.clone().add(new THREE.Vector3(0, 1.6, 0)), false);
   renderer.compile(scene, camera);
   composer.render();
   await step(100, 'Ready.');
   return extra;
+}
+
+// ------------------------------------------------------------------ Reflections
+// The city, captured from the air beside the hub into a cube map, becomes the
+// environment every metal, glass and polished floor reflects. It is re-taken
+// as day turns to night (a few times a day), never every frame.
+const pmrem = new THREE.PMREMGenerator(renderer);
+const cubeRT = new THREE.WebGLCubeRenderTarget(128, { type: THREE.HalfFloatType });
+const cubeCam = new THREE.CubeCamera(1, 16000, cubeRT);
+cubeCam.position.set(0, 360, -175);
+scene.add(cubeCam);
+
+// Only shiny things reflect: metals and glass fully, polished floors faintly.
+// A scene-wide environment would also light every rough wall from the sky.
+function reflectiveMaterials() {
+  const out = new Map();
+  scene.traverse((o) => {
+    if (!o.isMesh || o.isInstancedMesh) return;
+    for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+      if (!m || !m.isMeshStandardMaterial || out.has(m)) continue;
+      if (m.metalness >= 0.5) out.set(m, 0.9);
+      else if (m === MAT.floor || m === MAT.floorWarm || m === MAT.glass) out.set(m, 0.3);
+    }
+  });
+  return out;
+}
+function applyReflections(tex) {
+  for (const [m, k] of reflectiveMaterials()) {
+    if (m.envMap !== tex) {
+      if (!m.envMap !== !tex) m.needsUpdate = true;
+      m.envMap = tex;
+      m.envMapIntensity = k;
+    }
+  }
+}
+function refreshReflections() {
+  envNight = ENV.uNight.value;
+  if (!QUALITY[qualityLevel].reflections) return;
+  const hide = [G.walker.model.group, G.speeder.group, G.beacon];
+  const was = hide.map((o) => o.visible);
+  hide.forEach((o) => { o.visible = false; });
+  cubeCam.update(renderer, scene);
+  hide.forEach((o, i) => { o.visible = was[i]; });
+  const next = pmrem.fromCubemap(cubeRT.texture);
+  applyReflections(next.texture);
+  if (envRT) envRT.dispose();
+  envRT = next;
 }
 
 // ------------------------------------------------------------------ Game state
@@ -253,14 +327,71 @@ const ctx = {
   afterSleep: (mins) => {
     toast(`You sleep for ${Math.round(mins / 60)} hours and wake refreshed.`, 'win');
   },
+  event: (name, data) => story.emit(name, data),
 };
 
-const DISPATCHER = [
-  '"Fast pilots get the good jobs. Slow pilots get the spice-eels."',
-  '"Land on the deck, walk to the terminal, collect your fee. Not complicated."',
-  '"Fragile means fragile. Every bump comes out of your pay."',
-  '"Outer decks pay more. Longer flight, more traffic. Your call."',
-];
+// Vool's collectors: if you run, you have 25 seconds to reach your speeder.
+let escapeUntil = 0;
+function startEscape() {
+  escapeUntil = elapsed + 25;
+  toast('Run! Get to your speeder and take off. You have 25 seconds.', 'bad', 6000);
+  sfx('alert');
+}
+function updateEscape() {
+  if (!escapeUntil || !story.isAt('collectors')) { escapeUntil = 0; return; }
+  if (mode === 'fly') {
+    escapeUntil = 0;
+    story.advance("You outran Vool's collectors and kept the cargo key.");
+  } else if (elapsed > escapeUntil) {
+    escapeUntil = 0;
+    const lost = Math.min(Math.max(state.credits, 0), 100);
+    if (lost) addCredits(-lost, "Vool's collectors");
+    state.energy = Math.max(5, state.energy - 25);
+    G.rig.shake = 1.2;
+    sfx('bump');
+    toast('They caught you and shook you down, but a security drone scared them off. You still have the key.', 'bad', 7000);
+    story.advance("Vool's collectors roughed you up, but you held on to the cargo key.");
+  }
+}
+
+// The Data Chips stall: a decoder chip for the story, trinkets otherwise.
+function openChips() {
+  openPanel('Data Chips', (body) => {
+    const msg = h('div.result');
+    const item = (name, price, desc, buy) => h('div.menu-item', {},
+      h('div', {}, h('b', {}, name), h('div.muted', {}, desc)),
+      h('button.btn', { onclick: () => {
+        if (state.credits < price) { msg.textContent = 'Not enough credits.'; sfx('lose'); return; }
+        addCredits(-price, name);
+        sfx('coin');
+        buy();
+      } }, `${price} cr`));
+    if (story.isAt('buy-chip')) {
+      body.append(item('Decoder chip (military grade)', 150, 'The seller pretends not to know what it is for.', () => {
+        story.flag('hasChip', true);
+        story.advance('You bought a military decoder chip at the Data Chips stall.');
+        closePanel();
+      }));
+    }
+    body.append(
+      item('Starmap chip', 25, 'Every lane in the sector. Out of date by a decade.', () => { msg.textContent = 'You pocket the starmap chip. It hums faintly.'; }),
+      item('Holo-pet chip', 40, 'A tiny holographic cat that ignores you.', () => { msg.textContent = 'The holo-cat looks at you once and goes to sleep.'; }),
+      msg
+    );
+  }, { kicker: 'Galleria Market' });
+}
+
+function searchCache() {
+  if (story.isAt('find-cache')) {
+    story.flag('hasCache', true);
+    toast("You pry open the locker. Inside: a cargo key stamped with the Meridian Vow's crest. Footsteps behind you.", 'race', 7000);
+    story.advance("You found the Meridian Vow's cargo key, hidden on the Shelf.");
+  } else if (story.reached('collectors')) {
+    toast('The locker is empty now.', 'info');
+  } else {
+    toast('A rusted cargo locker. Its lock glows green, and it will not open for you. Not yet.', 'info');
+  }
+}
 
 function doAction(it) {
   sfx('open');
@@ -278,7 +409,10 @@ function doAction(it) {
     case 'terminal': acts.openTerminal(ctx); break;
     case 'plaque': acts.openPlaque(); break;
     case 'sleep': acts.sleepUntilMorning(ctx); break;
-    case 'talk': speech('Dispatcher', DISPATCHER[Math.floor(Math.random() * DISPATCHER.length)]); break;
+    case 'person': G.people.talkTo(it.data.id, sfx); break;
+    case 'chips': openChips(); break;
+    case 'cache': searchCache(); break;
+    case 'gaterun': G.gaterun.open(); break;
     case 'lift-call': {
       const el = G.elevator;
       const idx = it.data.level;
@@ -545,11 +679,13 @@ function update(dt) {
   w.speedMul = bodySpeedMul();
   const elev = updateEnvironment(state.minutes, sun, hemi);
   void elev;
+  if (Math.abs(ENV.uNight.value - envNight) > 0.2) refreshReflections();
 
   // Toggles.
   if (pressed('KeyH')) { helpOpen = !helpOpen; $('help').classList.toggle('hidden', !helpOpen); }
   if (pressed('KeyO')) openSettings();
   if (pressed('KeyV')) callSpeeder();
+  if (pressed('KeyJ')) story.openJournal(() => clearTarget());
 
   // Lift.
   const el = G.elevator;
@@ -619,6 +755,14 @@ function update(dt) {
   G.crowd.update(dt, w.pos, camera.position);
   G.ads.update(elapsed);
   G.flyers.update(dt, elapsed, s.parked ? s.pos : null);
+  G.people.update(dt, w.pos, camera.position, elapsed);
+  G.gaterun.update(dt, mode === 'fly' ? s.pos : null);
+  updateEscape();
+  if (mode === 'fly' && story.favorState('imani') === 'active') {
+    for (const l of LANDMARKS) {
+      if (Math.hypot(s.pos.x - l.i * 120, s.pos.z - l.j * 120) < 350) story.emit('near', { what: l.id });
+    }
+  }
   G.atmosphere.update(elapsed, camera);
   G.race.update(dt, elapsed, focus.length() < 1500);
   for (const o of G.district.spinners) o.rotation.y += o.userData.spin * dt;
@@ -635,7 +779,7 @@ function update(dt) {
     clearTarget();
   }
 
-  if (guide) {
+  if (guide && !(mode === 'walk' && w.pos.distanceTo(guide.pos) < 25)) {
     const d = camera.position.distanceTo(guide.pos);
     const r = Math.max(0.8, d * 0.004);
     G.beacon.visible = true;
@@ -648,7 +792,11 @@ function update(dt) {
   hudTimer -= dt;
   setPrompt(prompt);
   const zone = zoneAt(focus);
-  if (zone !== currentZone) { currentZone = zone; showLocation(zone); }
+  if (zone !== currentZone) {
+    currentZone = zone;
+    showLocation(zone);
+    if (zone) story.emit('zone', { name: zone.name });
+  }
   if (hudTimer <= 0) {
     hudTimer = 0.05;
     updateHUD({
@@ -662,7 +810,7 @@ function update(dt) {
         ...LANDMARKS.map((l) => ({ x: l.i * 120, z: l.j * 120, icon: '●' })),
       ],
     });
-    const tick_ = G.race.tickerText();
+    const tick_ = G.gaterun.ticker() || G.race.tickerText();
     const tk = $('ticker');
     if (tick_ && (focus.length() < 2000 || G.race.race.bets.length)) { tk.textContent = tick_; tk.classList.add('show'); }
     else tk.classList.remove('show');
@@ -797,8 +945,8 @@ function begin(fresh) {
   requestLock(canvas);
   if (!G.resumed || fresh) {
     setTimeout(() => toast('Welcome to the city. You have 500 credits, a speeder on the East Pad, and rent due at 06:00.', 'info', 8000), 600);
-    setTimeout(() => toast('Earn credits at the Courier Guild (south-west). Spend them at the Lucky Comet Casino (north-east).', 'info', 8000), 3500);
-    setTimeout(() => toast('Lost? Press M for the map and a list of places. Pick one and follow the ◆ marker: it tells you when to take the lift or fly.', 'info', 9000), 7000);
+    setTimeout(() => toast(`Your first objective: ${story.current().goal}. Follow the ◆ marker. Press J for your journal.`, 'race', 10000), 3500);
+    setTimeout(() => toast('People with a ! over their heads have something for you. Press M for the map and every place in the city.', 'info', 9000), 8000);
   } else {
     toast(`Welcome back. Day ${state.day}, ${state.credits} cr.`, 'info', 5000);
   }
@@ -824,7 +972,8 @@ build().then((extra) => {
     step: (n, dt = 1 / 30) => { for (let i = 0; i < n; i++) { update(dt); endFrame(); } },
     doAction: (action, data) => doAction({ action, data }),
     nearest: () => nearestInteract(G.walker.pos),
-    nav, openMap, closeMap,
-    guide: () => guidance(mode === 'fly' ? G.speeder.pos : G.walker.pos, mode, G.speeder, mode === 'walk' && G.elevator.containsPlayer(G.walker.pos)), setMode: (m) => (m === 'fly' ? boardSpeeder() : exitSpeeder()), begin, world, interactables, get mode() { return mode; }, get quality() { return QUALITY[qualityLevel].name; }, openSettings, totalMinutes };
+    nav, openMap, closeMap, story,
+    guide: () => guidance(mode === 'fly' ? G.speeder.pos : G.walker.pos, mode, G.speeder, mode === 'walk' && G.elevator.containsPlayer(G.walker.pos)), setMode: (m) => (m === 'fly' ? boardSpeeder() : exitSpeeder()), begin, world, interactables, get mode() { return mode; }, get quality() { return QUALITY[qualityLevel].name; }, openSettings,
+    setQuality: (name) => { settings.quality = name; applyQuality(Math.max(0, QUALITY.findIndex((q) => q.name === name))); }, totalMinutes };
 });
 requestAnimationFrame(frame);

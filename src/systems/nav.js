@@ -23,7 +23,7 @@ export function levelName(y) {
 }
 
 // Built after the world exists (decks and pads are filled in while building).
-export function buildPlaces(speeder) {
+export function buildPlaces(speeder, extra = []) {
   const P = LEVELS.promenade;
   const hub = [
     { name: 'Lucky Comet Casino', pos: V(62, P, 78), level: P, hint: 'Roulette, twenty-one, slots and Skyrace betting' },
@@ -40,10 +40,12 @@ export function buildPlaces(speeder) {
   const you = [{ name: 'Your speeder', get pos() { return speeder.pos; }, group: 'You', hint: 'Press F beside it to fly, or V to have it brought to you', dynamic: true }];
   const deckPlaces = decks.map((d) => ({ name: d.name, pos: d.dropPos, group: 'Rooftop decks', hint: 'Land on the pad, walk to the terminal' }));
   const sights = LANDMARKS.map((l) => ({ name: l.name, pos: V(l.i * CELL, 320, l.j * CELL), group: 'Landmarks', hint: 'Fly past it', sight: true }));
-  return [...hub, ...you, ...deckPlaces, ...sights];
+  return [...hub, ...you, ...extra, ...deckPlaces, ...sights];
 }
 
-export const nav = { target: null, places: [] };
+// before(): a target that outranks everything (an armed Gate Run).
+// after(): a fallback when nothing else is set (the story objective).
+export const nav = { target: null, places: [], before: null, after: null };
 
 export function setTarget(place) {
   nav.target = place;
@@ -67,11 +69,15 @@ function nearestPadAt(y, near) {
 
 // The place being guided to: a picked place, else the active job's destination.
 export function activeTarget() {
+  const first = nav.before && nav.before();
+  if (first) return first;
   if (nav.target) return nav.target;
   if (state.job) {
     const pos = jobTarget();
     if (pos) return { name: state.job.dest, pos, job: true, level: Math.hypot(pos.x, pos.z) < HUB_RADIUS ? pos.y : null };
   }
+  const last = nav.after && nav.after();
+  if (last) return { ...last, level: inHub(last.pos) ? last.pos.y : null };
   return null;
 }
 

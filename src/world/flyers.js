@@ -60,7 +60,7 @@ export function createFlyers(scene) {
   const rng = makeRng(4242);
   const flyers = [];
   const hubPads = pads.filter((p) => Math.hypot(p.x, p.z) < 200);
-  const deckPads = pads.filter((p) => Math.hypot(p.x, p.z) >= 200);
+  const deckPads = pads.filter((p) => Math.hypot(p.x, p.z) >= 200 && !p.hidden);
 
   const make = (kind) => {
     const [color, accent] = kind === 'police' ? [0x1c2840, 0x3366ff] : rng.pick(TAXI_COLORS);

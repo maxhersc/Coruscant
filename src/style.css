@@ -287,3 +287,15 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--cyan); }
   .roulette-grid { grid-template-columns: repeat(7, 1fr); }
   .roulette-grid .num.green { grid-row: auto; }
 }
+
+/* Conversations */
+.panel-body.dialogue { gap: 14px; }
+.dialogue-text { font-size: 17px; line-height: 1.55; margin: 0; }
+.dialogue-choices { display: flex; flex-direction: column; gap: 6px; }
+.btn.choice { text-align: left; font-family: var(--body-font); font-weight: 500; font-size: 15px; display: flex; gap: 10px; align-items: center; padding: 9px 12px; }
+.btn.choice .num { font-family: var(--hud-font); font-weight: 700; color: var(--amber); min-width: 14px; }
+
+/* Journal */
+.journal-chapter { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-left: 3px solid var(--magenta); background: rgba(255, 122, 192, 0.06); border-radius: 4px; }
+.journal-goal { font-size: 16px; line-height: 1.45; }
+.journal-log { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: 14px; line-height: 1.45; }

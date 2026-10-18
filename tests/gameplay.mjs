@@ -305,7 +305,76 @@ r = await ev(() => {
 });
 check('V brings the speeder to the nearest pad', Math.abs(r.pos[0] - 132) < 2 && Math.abs(r.pos[1] - 301) < 2 && r.parked && r.visible && r.paid === 10, JSON.stringify(r));
 
-// 20. Auto quality steps down when frames are slow (a software renderer is).
+// 20. The story, start to finish through its conversations and world events.
+const say = async (id, ...picks) => {
+  await ev((id) => window.__game.doAction('person', { id }), id);
+  // Click in the page: on a software renderer the panel's open animation can
+  // outlast Playwright's wait for the element to stop moving.
+  for (const p of picks) {
+    const ok = await ev((p) => { const b = document.querySelector(`#panel .dialogue-choices button:nth-child(${p})`); if (b) b.click(); return !!b; }, p);
+    if (!ok) throw new Error(`no choice ${p} talking to ${id}`);
+  }
+  if (await page.$('#panel.open')) await page.keyboard.press('Escape');
+};
+const at = () => ev(() => window.__game.story.current().id);
+r = { steps: [] };
+await ev(() => { const g = window.__game; if (g.mode === 'fly') g.setMode('walk'); g.state.story = undefined; g.state.credits = 2000; g.state.job = null; });
+r.steps.push(await at());                                   // meet-nella
+await say('nella', 1, 1);
+r.steps.push(await at());                                   // first-job
+await ev(() => window.__game.story.emit('delivered'));
+r.steps.push(await at());                                   // report-nella
+await say('nella', 1, 1);
+r.steps.push(await at());                                   // deliver-case
+await say('kess', 1, 1, 1);
+r.steps.push(await at());                                   // see-brask
+await say('brask', 1, 1);
+r.steps.push(await at());                                   // see-zeela
+await say('zeela', 1, 1);
+r.steps.push(await at());                                   // buy-chip
+await ev(() => { window.__game.doAction('chips'); document.querySelector('#panel .menu-item button').click(); });
+r.steps.push(await at());                                   // zeela-decode
+await say('zeela', 1, 1);
+r.steps.push(await at());                                   // go-shelf
+await ev(() => { const g = window.__game; const c = g.G.shelf.center; g.G.walker.place(c.x, c.y, c.z, 0); g.step(3); });
+r.steps.push(await at());                                   // find-cache
+await ev(() => window.__game.doAction('cache'));
+r.steps.push(await at());                                   // collectors
+await say('rusk', 1);                                       // pay them off
+r.steps.push(await at());                                   // decide
+await say('dale', 1);
+r.steps.push(await at());                                   // epilogue
+await say('nella', 1);
+r.steps.push(await at());                                   // done
+const ending = await ev(() => window.__game.story.flag('ending'));
+check('story plays through to the end', r.steps.join(',') === 'meet-nella,first-job,report-nella,deliver-case,see-brask,see-zeela,buy-chip,zeela-decode,go-shelf,find-cache,collectors,decide,epilogue,done' && ending === 'dale', r.steps.join(','));
+r = await ev(() => window.__game.story.storyState().log.length);
+check('the journal records the story', r === 13, String(r));
+
+// 21. A favour: noodles for Jessa.
+await say('jessa', 1);
+await ev(() => { window.__game.doAction('food', { item: 'noodles' }); document.querySelector('#panel .menu-item button').click(); });
+await page.keyboard.press('Escape');
+const c2 = await ev(() => window.__game.state.credits);
+await say('jessa', 1);
+r = await ev(() => ({ fav: window.__game.story.favorState('jessa'), credits: window.__game.state.credits }));
+check('favour: bring Jessa noodles', r.fav === 'done' && r.credits === c2 + 60, JSON.stringify(r));
+
+// 22. Gate Run: arm, fly the gates in order, finish.
+r = await ev(() => {
+  const g = window.__game;
+  const gr = g.G.gaterun;
+  gr.run.armed = true; gr.run.active = false; gr.run.next = 0;
+  g.setMode('fly');
+  const s = g.G.speeder;
+  const gates = g.G.race.gates;
+  const order = [...gates, gates[0]];
+  for (const gate of order) { s.pos.copy(gate.pos); s.vel.set(0, 0, 0); s.speed = 0; g.step(15); }
+  return { best: g.story.storyState().bestRun, active: gr.run.active };
+});
+check('gate run times a full lap', r.best > 0 && !r.active, JSON.stringify(r));
+
+// 23. Auto quality steps down when frames are slow (a software renderer is).
 // Its own page, without ?low, so it starts at high.
 {
   await page.close();

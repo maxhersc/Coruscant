@@ -27,9 +27,9 @@ export function saveSettings() {
   }
 }
 
-// Quality levels, high to low: render resolution scale and bloom.
+// Quality levels, high to low: render resolution scale, bloom, reflections.
 export const QUALITY = [
-  { name: 'high', pixelRatio: 1.5, bloom: true },
-  { name: 'medium', pixelRatio: 1, bloom: true },
-  { name: 'low', pixelRatio: 0.75, bloom: false },
+  { name: 'high', pixelRatio: 1.5, bloom: true, reflections: true },
+  { name: 'medium', pixelRatio: 1, bloom: true, reflections: true },
+  { name: 'low', pixelRatio: 0.75, bloom: false, reflections: false },
 ];

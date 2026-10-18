@@ -29,7 +29,7 @@ click again.
 | `E` interact / talk | `Space` rise, `C` descend |
 | `F` board your speeder, `V` call it to the nearest pad (10 cr) | `F` land (slow down over a floor first) |
 
-`M` map and places · `H` help · `O` settings · `Esc` close a panel or release the mouse.
+`J` journal · `M` map and places · `H` help · `O` settings · `Esc` close a panel or release the mouse.
 
 **Finding your way**: press `M`, pick a place from the list (or click it on
 the map), and follow the pink ◆ marker and light pillar. The banner under the
@@ -66,6 +66,28 @@ and glow if it drops below 40 fps, raising them again when there is headroom.
   by day and by the city's glow at night, and searchlights sweep the night sky.
 - **Day and night**: a 12-minute day. Dusk is when the city looks its best.
 
+## The story: The Sealed Case
+
+Start by meeting Nella Ves, the dispatcher at the Courier Guild. One delivery
+later she hands you a sealed case for a contact on a rooftop deck, and things
+go sideways from there: a hooded stranger, an old pilot who remembers a lost
+freighter, a decoder chip from the market, a flight down through the clouds
+to the Undercity Shelf, and Vool's collectors waiting for you. You choose how
+to deal with them (pay, bluff or run) and who gets what you found (the
+Inspector or the loan shark). Press `J` for your journal; the ◆ waypoint
+always points at your next objective.
+
+**People** (a `!` over someone's head means they have something for you):
+Nella Ves (Courier Guild), Old Brask (Low Orbit cantina), Zeela (Holo Repair,
+Galleria Market), Vool (Vool's Credit), Inspector Dale (by the Spire doors),
+Jessa Marr (your neighbour), Dr. Imani Sola (Skydeck) and T-77 (the dealer
+droid). Some ask favours: noodles for Jessa, a survey flight past the Temple
+and the Dome for Dr. Sola, and beating Brask's Gate Run record.
+
+**Gate Run**: a time trial through the twelve Skyrace gates around the Spire.
+Arm it at the kiosk by the East Pad; the next gate glows amber. Under par pays
+100 cr once a day.
+
 ## Living there
 
 - **Needs**: hunger and energy fall over time. Eat at the stalls, sleep in
@@ -100,6 +122,7 @@ src/
     traffic.js         GPU skylane traffic
     flyers.js          taxis and police that route along the streets
     atmosphere.js      cloud decks and searchlights
+    undercity.js       the Undercity Shelf, below the clouds
     district.js        the Spire hub's four levels and the rooftop decks
     elevator.js        the glass lift
     props.js           prop builders (rails, rooms, stalls, signs, pads)
@@ -107,7 +130,8 @@ src/
   npc/                 the crowd (instanced, with swinging limbs) and the player model
   player/              walking, speeder flight, camera
   systems/             time, needs, money, jobs, shops, saving
-  casino/              table games and Skyrace
+  casino/              table games, Skyrace and the Gate Run
+  story/               the storyline, named people and conversations
   ui/                  HUD, panels, map
   audio/               procedural sound
 ```
@@ -122,7 +146,8 @@ camera all query the same hash.
 `window.__game.step()`, which advances the simulation without rendering:
 walking, jumping, railings, the lift and its doors, food, courier jobs,
 flight and collisions, landing, delivery, the casino, Skyrace, rent, falling,
-sleep, settings, wayfinding and automatic quality.
+sleep, settings, wayfinding, the speeder valet, the whole storyline, a
+favour, the Gate Run and automatic quality.
 
 ```sh
 npm run build && npm run preview     # terminal 1
