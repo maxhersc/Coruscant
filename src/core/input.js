@@ -8,6 +8,7 @@ export const input = {
   mouseDY: 0,
   wheel: 0,
   locked: false,
+  lockFailed: false, // the browser refused pointer lock: look by dragging instead
   mouseDown: false,
   enabled: true,
 };
@@ -22,13 +23,14 @@ export function initInput(canvas, onLockChange) {
   window.addEventListener('keyup', (e) => input.keys.delete(e.code));
   window.addEventListener('blur', () => input.keys.clear());
   window.addEventListener('mousemove', (e) => {
-    if (!input.locked) return;
+    if (!input.locked && !(input.lockFailed && input.mouseDown)) return;
     input.mouseDX += e.movementX || 0;
     input.mouseDY += e.movementY || 0;
   });
   window.addEventListener('wheel', (e) => { input.wheel += Math.sign(e.deltaY); }, { passive: true });
   canvas.addEventListener('mousedown', () => { input.mouseDown = true; });
   window.addEventListener('mouseup', () => { input.mouseDown = false; });
+  document.addEventListener('pointerlockerror', () => { input.lockFailed = true; });
   document.addEventListener('pointerlockchange', () => {
     input.locked = document.pointerLockElement === canvas;
     onLockChange?.(input.locked);
@@ -37,10 +39,12 @@ export function initInput(canvas, onLockChange) {
 
 export function requestLock(canvas) {
   try {
-    const p = canvas.requestPointerLock?.();
-    if (p && p.catch) p.catch(() => {});
+    if (!canvas.requestPointerLock) { input.lockFailed = true; return; }
+    const p = canvas.requestPointerLock();
+    if (p && p.catch) p.catch(() => { input.lockFailed = true; });
   } catch {
-    // Pointer lock can be refused (iframes, quick re-requests); the game still runs.
+    // Pointer lock can be refused (sandboxed frames); fall back to drag-to-look.
+    input.lockFailed = true;
   }
 }
 

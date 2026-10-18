@@ -542,7 +542,7 @@ function frame() {
   fpsTime += dt;
   if (fpsTime > 1) { window.__fps = fpsFrames / fpsTime; fpsFrames = 0; fpsTime = 0; }
   if (G && started) {
-    paused = !input.locked && !isPanelOpen() && !params.has('nolock');
+    paused = !input.locked && !input.lockFailed && !isPanelOpen() && !params.has('nolock');
     $('pause').classList.toggle('hidden', !paused || mapOpen || helpOpen);
     const t0 = performance.now();
     if (!paused || isPanelOpen()) update(dt);
