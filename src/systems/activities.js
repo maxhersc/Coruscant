@@ -167,8 +167,12 @@ export function openTerminal(ctx) {
       h('div.row', {},
         h('button.btn.primary', { onclick: () => { ctx.save(); ctx.toast('Game saved.', 'info'); } }, 'Save game'),
         h('button.btn.ghost', {
-          onclick: () => {
-            if (confirm('Start over? Your saved progress will be erased.')) { clearSave(); location.reload(); }
+          // Two clicks instead of a browser dialog, which embedded pages may not show.
+          onclick: (e) => {
+            const b = e.currentTarget;
+            if (b.dataset.armed) { clearSave(); location.reload(); return; }
+            b.dataset.armed = '1';
+            b.textContent = 'Click again to erase your save';
           },
         }, 'New life')
       ),
