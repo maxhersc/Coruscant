@@ -1,0 +1,617 @@
+import * as THREE from 'three';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+
+import { LEVELS, ABYSS_Y } from './config.js';
+import { world } from './core/collision.js';
+import { input, initInput, requestLock, pressed, key, endFrame } from './core/input.js';
+import { ENV, updateEnvironment } from './world/env.js';
+import { createSky } from './world/sky.js';
+import { generateCity, buildCityMeshes } from './world/city.js';
+import { buildLandmarks, isLandmarkCell, LANDMARKS } from './world/landmarks.js';
+import { buildDistrict, isHubCell } from './world/district.js';
+import { initMaterials } from './world/props.js';
+import { createTraffic, nearestCraft } from './world/traffic.js';
+import { createBeacons } from './world/beacons.js';
+import { createAds } from './world/ads.js';
+import { createCrowd } from './npc/crowd.js';
+import { Walker } from './player/walker.js';
+import { Speeder, SPEEDER_MODELS } from './player/speeder.js';
+import { CameraRig } from './player/cameraRig.js';
+import { state, tick, hooks, addCredits, bodySpeedMul, totalMinutes } from './systems/state.js';
+import { interactables, nearestInteract, npcZones, zoneAt, pads } from './systems/interact.js';
+import { jobTarget, minutesLeft, GUILD } from './systems/jobs.js';
+import { saveGame, loadGame } from './systems/save.js';
+import * as acts from './systems/activities.js';
+import { openRoulette, openBlackjack, openSlots, openDice } from './casino/games.js';
+import { createSkyrace } from './casino/races.js';
+import { openPanel, closePanel, isPanelOpen, onPanel, h } from './ui/panel.js';
+import { updateHUD, toast, showLocation, setPrompt, speech } from './ui/hud.js';
+import { initMap, drawMap } from './ui/map.js';
+import { initAudio, updateAudio, sfx } from './audio/audio.js';
+
+const params = new URLSearchParams(location.search);
+const LOW = params.has('low');
+const $ = (id) => document.getElementById(id);
+
+// ------------------------------------------------------------------ Renderer
+const canvas = $('game');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: !LOW, logarithmicDepthBuffer: true, powerPreference: 'high-performance' });
+renderer.info.autoReset = true;
+const pixelRatio = Math.min(devicePixelRatio, LOW ? 1 : 1.5);
+renderer.setPixelRatio(pixelRatio);
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.25, 22000);
+const hemi = new THREE.HemisphereLight(0x8899bb, 0x553322, 1);
+const sun = new THREE.DirectionalLight(0xffeedd, 1.5);
+scene.add(hemi, sun, sun.target);
+
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), 0.7, 0.35, 0.95);
+if (!LOW && !params.has('nobloom')) composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  composer.setSize(innerWidth, innerHeight);
+  bloom.resolution.set(innerWidth / 2, innerHeight / 2);
+});
+
+// ------------------------------------------------------------------ World build
+const loadBar = $('load-bar'), loadText = $('load-text');
+const step = async (pct, text) => {
+  loadBar.style.width = `${pct}%`;
+  loadText.textContent = text;
+  await new Promise((r) => setTimeout(r, 16));
+};
+
+let G = null; // everything built, filled by build()
+
+async function build() {
+  await step(5, 'Pouring foundations…');
+  initMaterials();
+  const city = generateCity(world, (i, j) => isHubCell(i, j) || isLandmarkCell(i, j));
+  await step(20, 'Raising ten thousand towers…');
+  scene.add(buildLandmarks(world, city.segs, city.beacons));
+  const district = buildDistrict(city.segs, city.decks, city.beacons);
+  scene.add(district.group);
+  await step(40, 'Lighting the windows…');
+  scene.add(buildCityMeshes(city.segs));
+  scene.add(buildCityMeshes(city.far));
+  scene.add(createSky());
+  await step(55, 'Opening the skylanes…');
+  const traffic = createTraffic();
+  scene.add(traffic.group);
+  scene.add(createBeacons(city.beacons));
+  const ads = createAds(city.segs);
+  scene.add(ads.group);
+  await step(70, 'Waking two trillion residents…');
+  const crowd = createCrowd(npcZones);
+  scene.add(crowd.group);
+  await step(82, 'Fuelling your speeder…');
+  const walker = new Walker(scene);
+  const speeder = new Speeder(scene, 'courier');
+  const rig = new CameraRig(camera);
+  const race = createSkyrace(scene, district.raceBoard, sfx, toast);
+  initMap(city.segs);
+  await step(92, 'Compiling shaders…');
+
+  G = { city, district, traffic, ads, crowd, walker, speeder, rig, race, elevator: district.elevator };
+
+  // Place the player (from a save, or fresh on the promenade).
+  const extra = loadGame();
+  speeder.setModel(SPEEDER_MODELS[state.speeder] ? state.speeder : 'courier');
+  if (extra && extra.player) {
+    walker.place(...extra.player, 0);
+    if (extra.speeder) speeder.park(extra.speeder.x, extra.speeder.groundY, extra.speeder.z, extra.speeder.yaw);
+    G.resumed = true;
+  } else {
+    walker.place(68, LEVELS.promenade, 0, Math.PI / 2);
+    speeder.park(132, LEVELS.promenade, 0, -Math.PI / 2);
+  }
+  rig.yaw = Math.PI / 2;
+  if (params.has('t')) state.minutes = Number(params.get('t')) * 60;
+
+  // Warm up: one render compiles every program before the player sees it.
+  updateEnvironment(state.minutes, sun, hemi);
+  rig.walk(0, walker.pos.clone().add(new THREE.Vector3(0, 1.6, 0)), false);
+  renderer.compile(scene, camera);
+  composer.render();
+  await step(100, 'Ready.');
+  return extra;
+}
+
+// ------------------------------------------------------------------ Game state
+let mode = 'walk'; // walk | fly
+let started = false;
+let paused = false;
+let mapOpen = false;
+let helpOpen = false;
+let viewer = null;
+let wheelSpin = 0;
+let bumpCooldown = 0;
+let lastAutosave = 0;
+let elapsed = 0;
+let nearCraft = null;
+let currentZone = null;
+const head = new THREE.Vector3();
+
+hooks.money = (n, reason) => {
+  if (!started) return;
+  if (Math.abs(n) >= 1) toast(`${n > 0 ? '+' : ''}${n} cr · ${reason}`, n > 0 ? 'money-pos' : 'info', 3200);
+};
+
+function saveExtra() {
+  const w = G.walker, s = G.speeder;
+  const p = mode === 'fly' ? safeLandingSpot() : w.pos;
+  return {
+    player: [p.x, p.y, p.z],
+    speeder: { x: s.pos.x, groundY: s.parked ? s.groundY : p.y, z: s.pos.z, yaw: s.yaw },
+  };
+}
+
+function safeLandingSpot() {
+  // When saving mid-flight, resume at the nearest pad.
+  let best = pads[0], bd = Infinity;
+  for (const p of pads) {
+    const d = G.speeder.pos.distanceTo(new THREE.Vector3(p.x, p.y, p.z));
+    if (d < bd) { bd = d; best = p; }
+  }
+  return new THREE.Vector3(best.x + 4, best.y, best.z);
+}
+
+function save() {
+  saveGame(saveExtra());
+}
+
+function fade(mid, hold = 500) {
+  const f = $('fade');
+  f.classList.add('on');
+  setTimeout(() => {
+    mid();
+    setTimeout(() => f.classList.remove('on'), hold);
+  }, 650);
+}
+
+// ------------------------------------------------------------------ Interactions
+const ctx = {
+  sfx,
+  toast,
+  fade,
+  save,
+  saveExtra: () => saveExtra(),
+  setSpeederModel: (id) => {
+    const s = G.speeder;
+    const parked = { x: s.pos.x, y: s.groundY, z: s.pos.z, yaw: s.yaw };
+    s.setModel(id);
+    if (mode !== 'fly') s.park(parked.x, parked.y, parked.z, parked.yaw);
+  },
+  afterSleep: (mins) => {
+    toast(`You sleep for ${Math.round(mins / 60)} hours and wake refreshed.`, 'win');
+  },
+};
+
+const DISPATCHER = [
+  '"Fast pilots get the good jobs. Slow pilots get the spice-eels."',
+  '"Land on the deck, walk to the terminal, collect your fee. Not complicated."',
+  '"Fragile means fragile. Every bump comes out of your pay."',
+  '"Outer decks pay more. Longer flight, more traffic. Your call."',
+];
+
+function doAction(it) {
+  sfx('open');
+  switch (it.action) {
+    case 'roulette': openRoulette(sfx, (n) => { wheelSpin = 18 + n * 0.01; }); break;
+    case 'blackjack': openBlackjack(sfx); break;
+    case 'slots': openSlots(sfx); break;
+    case 'dice': openDice(sfx); break;
+    case 'races': G.race.openBetting(); break;
+    case 'food': acts.openFood(it.data.item, ctx); break;
+    case 'jobs': acts.openJobs(GUILD.name, ctx); break;
+    case 'deck-terminal': acts.openJobs(it.data.deck, ctx); break;
+    case 'dealer': acts.openDealer(ctx); break;
+    case 'loan': acts.openLoan(ctx); break;
+    case 'terminal': acts.openTerminal(ctx); break;
+    case 'plaque': acts.openPlaque(); break;
+    case 'sleep': acts.sleepUntilMorning(ctx); break;
+    case 'talk': speech('Dispatcher', DISPATCHER[Math.floor(Math.random() * DISPATCHER.length)]); break;
+    case 'lift-call': {
+      const el = G.elevator;
+      const idx = it.data.level;
+      if (el.docked() && el.levelIndexAt(el.y) === idx) toast('The lift is here. Step inside and press E.', 'info');
+      else { el.call(idx); toast('Lift called.', 'info', 2000); sfx('lift'); }
+      break;
+    }
+    case 'lift-choose': openLiftPanel(); break;
+    case 'viewer': startViewer(); break;
+    default: break;
+  }
+}
+
+function openLiftPanel() {
+  const el = G.elevator;
+  openPanel('Spire Lift', (body) => {
+    const cur = el.levelIndexAt(el.y);
+    body.append(h('p.muted', {}, 'Choose a floor.'));
+    el.levels.forEach((lv, i) => {
+      body.append(h('button.btn' + (i === cur ? '.ghost' : '.primary'), {
+        disabled: i === cur ? 'true' : undefined,
+        onclick: () => {
+          el.call(i);
+          el.riding = true;
+          sfx('lift');
+          closePanel();
+        },
+      }, `${lv.y} · ${lv.name}`));
+    });
+  }, { kicker: 'Glass elevator' });
+}
+
+function startViewer() {
+  const targets = [
+    { name: 'The Temple', p: new THREE.Vector3(LANDMARKS[1].i * 120, 300, LANDMARKS[1].j * 120) },
+    { name: 'The Assembly Dome', p: new THREE.Vector3(LANDMARKS[0].i * 120, 320, LANDMARKS[0].j * 120) },
+  ];
+  const t = targets[Math.floor(Math.random() * targets.length)];
+  const from = G.walker.pos.clone().add(new THREE.Vector3(0, 1.7, 0));
+  viewer = { until: elapsed + 9, name: t.name };
+  G.rig.override = { pos: from, look: t.p, fov: 9, ease: 6 };
+  toast(`Through the viewer: ${t.name}. Press any movement key to stop.`, 'info', 4000);
+}
+
+onPanel('open', () => {
+  input.enabled = false;
+  if (document.pointerLockElement) document.exitPointerLock();
+});
+onPanel('close', () => {
+  input.enabled = true;
+  requestLock(canvas);
+});
+
+function boardSpeeder() {
+  mode = 'fly';
+  G.walker.setVisible(false);
+  G.speeder.parked = false;
+  G.speeder.speed = 0;
+  G.speeder.vel.set(0, 3, 0);
+  G.rig.camera.position.copy(G.speeder.pos).add(new THREE.Vector3(-Math.sin(G.speeder.yaw) * 10, 4, -Math.cos(G.speeder.yaw) * 10));
+  sfx('board');
+  if (!state.tutorialDone) {
+    toast('W to throttle, mouse to steer, Space/C to rise and descend. Hold Shift to boost.', 'info', 7000);
+  }
+}
+
+// Ground suitable for setting down: a walkable top within a few metres below.
+function landingGround() {
+  const p = G.speeder.pos;
+  const g = world.groundAt(p.x, p.z, p.y, 0, 0.5);
+  if (g === -Infinity || p.y - g > 9) return null;
+  return g;
+}
+
+function exitSpeeder() {
+  const g = landingGround();
+  if (g === null) return false;
+  if (Math.abs(G.speeder.speed) > 30) { toast('Slow down to land.', 'bad', 2000); return false; }
+  const s = G.speeder;
+  s.park(s.pos.x, g, s.pos.z, s.yaw);
+  // Step out to the side if there is floor there.
+  const w = G.walker;
+  const sideX = Math.cos(s.yaw) * 3, sideZ = -Math.sin(s.yaw) * 3;
+  let px = s.pos.x + sideX, pz = s.pos.z + sideZ;
+  const gs = world.groundAt(px, pz, g + 0.4, 0.5, 0);
+  if (!(Math.abs(gs - g) < 0.6) || world.pointInside(px, g + 1, pz)) { px = s.pos.x - sideX; pz = s.pos.z - sideZ; }
+  const g2 = world.groundAt(px, pz, g + 0.4, 0.5, 0);
+  if (!(Math.abs(g2 - g) < 0.6) || world.pointInside(px, g + 1, pz)) { px = s.pos.x; pz = s.pos.z; }
+  w.place(px, g + 0.05, pz, s.yaw);
+  w.setVisible(true);
+  mode = 'walk';
+  G.rig.yaw = s.yaw;
+  G.rig.pitch = -0.15;
+  sfx('land');
+  if (!state.tutorialDone) { state.tutorialDone = true; }
+  return true;
+}
+
+// ------------------------------------------------------------------ Events
+function handleEvents(events) {
+  for (const e of events) {
+    if (e.type === 'rent') {
+      toast(`Rent of 120 cr collected.${state.credits < 0 ? ' You are in the red. Find work fast.' : ''}`, state.credits < 0 ? 'bad' : 'info', 6000);
+      sfx('alert');
+    }
+    if (e.type === 'newday') toast(`Day ${state.day} begins.`, 'info');
+    if (e.type === 'loandue' && state.loan) {
+      const owed = state.loan.owed;
+      state.loan = null;
+      addCredits(-owed, "Vool's collectors");
+      state.energy = Math.max(5, state.energy - 35);
+      G.rig.shake = 1.2;
+      sfx('bump');
+      toast(`Vool's collectors found you. They took ${owed} cr and left you bruised.`, 'bad', 8000);
+    }
+    if (e.type === 'collapse') collapse();
+  }
+}
+
+function collapse() {
+  if (G.collapsing) return;
+  G.collapsing = true;
+  fade(() => {
+    if (mode === 'fly') {
+      const p = safeLandingSpot();
+      G.speeder.park(p.x - 4, p.y, p.z, G.speeder.yaw);
+      mode = 'walk';
+      G.walker.setVisible(true);
+    }
+    G.walker.place(8, LEVELS.residences, 57, Math.PI);
+    state.minutes += 6 * 60;
+    if (state.minutes >= 1440) { state.minutes -= 1440; state.day += 1; }
+    state.energy = 45;
+    addCredits(-80, 'Medical droid call-out');
+    toast('You collapsed from exhaustion. A med droid carried you home. Sleep more!', 'bad', 7000);
+    G.collapsing = false;
+  }, 900);
+}
+
+function fellOff() {
+  if (G.falling) return;
+  G.falling = true;
+  fade(() => {
+    const s = G.walker.lastSafe;
+    G.walker.place(s.x, s.y, s.z, G.walker.facing);
+    // Nudge back from the edge we fell from.
+    const z = zoneAt(G.walker.pos);
+    if (!z) G.walker.place(68, LEVELS.promenade, 0, Math.PI / 2);
+    addCredits(-50, 'Fall-catch drone');
+    toast('A fall-catch drone snagged you a few hundred metres down. That will be 50 credits.', 'bad', 6000);
+    G.falling = false;
+  });
+}
+
+// ------------------------------------------------------------------ Main loop
+const clock = new THREE.Clock();
+let hudTimer = 0;
+
+function update(dt) {
+  elapsed += dt;
+  ENV.uTime.value = elapsed;
+  const w = G.walker, s = G.speeder, rig = G.rig;
+
+  // Time and body.
+  if (!paused) handleEvents(tick(dt));
+  w.speedMul = bodySpeedMul();
+  const elev = updateEnvironment(state.minutes, sun, hemi);
+  void elev;
+
+  // Toggles.
+  if (pressed('KeyM')) { mapOpen = !mapOpen; $('mapview').classList.toggle('hidden', !mapOpen); }
+  if (pressed('KeyH')) { helpOpen = !helpOpen; $('help').classList.toggle('hidden', !helpOpen); }
+
+  // Lift.
+  const el = G.elevator;
+  el.update(dt, mode === 'walk' ? w : null);
+  if (el.riding && el.docked()) el.riding = false;
+  w.frozen = el.riding || !!viewer;
+
+  // Viewer.
+  if (viewer) {
+    if (elapsed > viewer.until || key('KeyW') || key('KeyA') || key('KeyS') || key('KeyD')) {
+      viewer = null;
+      rig.override = null;
+    }
+  }
+
+  let prompt = null;
+  if (mode === 'walk') {
+    w.update(dt, rig.yaw);
+    if (rig.override) rig.cinematic(dt);
+    else {
+      head.copy(w.pos).y += 1.6;
+      rig.walk(dt, head, !isPanelOpen());
+    }
+    if (w.pos.y < Math.min(ABYSS_Y, w.lastSafe.y - 60)) fellOff();
+
+    // What can we do here?
+    const it = nearestInteract(w.pos);
+    const dSpeeder = w.pos.distanceTo(s.pos);
+    const npc = G.crowd.nearest(w.pos, 2.2);
+    if (!el.riding && !isPanelOpen()) {
+      if (dSpeeder < 5) prompt = `<kbd>F</kbd> Board your ${s.spec.name}`;
+      if (it) {
+        const label = typeof it.label === 'function' ? it.label() : it.label;
+        const deliverHere = state.job && ((it.action === 'deck-terminal' && it.data.deck === state.job.dest) || (it.action === 'jobs' && state.job.dest === GUILD.name));
+        prompt = `<kbd>E</kbd> ${deliverHere ? 'Deliver ' + state.job.cargo : label}` + (prompt ? ` &nbsp; ${prompt}` : '');
+      } else if (npc) {
+        prompt = `<kbd>E</kbd> Talk` + (prompt ? ` &nbsp; ${prompt}` : '');
+      }
+      if (pressed('KeyE')) {
+        if (it) doAction(it);
+        else if (npc) {
+          npc.talkTimer = 5;
+          speech(npc.droid ? 'Droid' : 'Passer-by', npc.line);
+          sfx('click');
+        }
+      }
+      if (pressed('KeyF') && dSpeeder < 5) boardSpeeder();
+    }
+  } else {
+    s.update(dt, !isPanelOpen());
+    rig.fly(dt, s);
+    nearCraft = nearestCraft(G.traffic.lanes, s.pos, elapsed, 40);
+    if (nearCraft && nearCraft.d < 4.5 && bumpCooldown <= 0) {
+      onBump(25);
+      toast('Mind the skylanes!', 'bad', 2000);
+    }
+    const g = landingGround();
+    if (g !== null) prompt = Math.abs(s.speed) > 30 ? 'Slow down to land' : '<kbd>F</kbd> Land here';
+    if (pressed('KeyF')) exitSpeeder();
+  }
+  if (mode === 'walk') s.update(dt, false);
+  bumpCooldown -= dt;
+
+  // The world around.
+  const focus = mode === 'fly' ? s.pos : w.pos;
+  G.crowd.update(dt, w.pos, camera.position);
+  G.ads.update(elapsed);
+  G.race.update(dt, elapsed, focus.length() < 1500);
+  for (const o of G.district.spinners) o.rotation.y += o.userData.spin * dt;
+  if (G.district.rouletteWheel) {
+    G.district.rouletteWheel.rotation.y += wheelSpin * dt;
+    wheelSpin *= 1 - Math.min(1, dt * 0.6);
+  }
+
+  // HUD (a little less often than every frame).
+  hudTimer -= dt;
+  setPrompt(prompt);
+  const zone = zoneAt(focus);
+  if (zone !== currentZone) { currentZone = zone; showLocation(zone); }
+  if (hudTimer <= 0) {
+    hudTimer = 0.05;
+    updateHUD({
+      camera,
+      mode,
+      speeder: s,
+      jobTarget: jobTarget(),
+      jobLeft: minutesLeft(),
+      landmarks: [
+        { x: 0, z: 0, icon: '▲', cls: 'hub' },
+        ...LANDMARKS.map((l) => ({ x: l.i * 120, z: l.j * 120, icon: '●' })),
+      ],
+    });
+    const tick_ = G.race.tickerText();
+    const tk = $('ticker');
+    if (tick_ && (focus.length() < 2000 || G.race.race.bets.length)) { tk.textContent = tick_; tk.classList.add('show'); }
+    else tk.classList.remove('show');
+  }
+  if (mapOpen) {
+    const f = mode === 'fly' ? new THREE.Vector3(Math.sin(s.yaw), 0, Math.cos(s.yaw)) : new THREE.Vector3(Math.sin(w.facing), 0, Math.cos(w.facing));
+    drawMap($('mapcanvas'), {
+      player: { x: focus.x, z: focus.z, heading: Math.atan2(f.x, -f.z) },
+      speeder: s,
+      job: state.job,
+      flying: mode === 'fly',
+    });
+  }
+
+  updateAudio({
+    flying: mode === 'fly',
+    speed: s.speed,
+    boost: key('ShiftLeft'),
+    nearCraft: mode === 'fly' ? nearCraft : null,
+    crowdCount: mode === 'walk' ? G.crowd.countNear(w.pos, 18) : 0,
+    altitude: focus.y,
+    night: ENV.uNight.value,
+  });
+
+  // Autosave.
+  if (elapsed - lastAutosave > 60) {
+    lastAutosave = elapsed;
+    save();
+  }
+}
+
+function onBump(impact) {
+  if (bumpCooldown > 0) return;
+  bumpCooldown = 0.8;
+  G.rig.shake = Math.min(1.5, impact / 30);
+  sfx('bump');
+  if (state.job && state.job.fragile) {
+    state.job.damage += 1;
+    toast(`Fragile cargo took a hit (${state.job.damage}).`, 'bad', 2500);
+  }
+}
+
+let fpsFrames = 0, fpsTime = 0;
+function frame() {
+  requestAnimationFrame(frame);
+  const dt = Math.min(clock.getDelta(), 0.1);
+  fpsFrames++;
+  fpsTime += dt;
+  if (fpsTime > 1) { window.__fps = fpsFrames / fpsTime; fpsFrames = 0; fpsTime = 0; }
+  if (G && started) {
+    paused = !input.locked && !isPanelOpen() && !params.has('nolock');
+    $('pause').classList.toggle('hidden', !paused || mapOpen || helpOpen);
+    const t0 = performance.now();
+    if (!paused || isPanelOpen()) update(dt);
+    else ENV.uTime.value = elapsed;
+    window.__perf = window.__perf || { update: 0, render: 0 };
+    window.__perf.update = performance.now() - t0;
+    window.__perf.calls = renderer.info.render.calls;
+  } else if (G) {
+    // Title screen: a slow orbit around the Spire.
+    elapsed += dt;
+    ENV.uTime.value = elapsed;
+    updateEnvironment(state.minutes, sun, hemi);
+    const a = elapsed * 0.03 + 0.6;
+    camera.position.set(Math.cos(a) * 520, 420 + Math.sin(elapsed * 0.05) * 40, Math.sin(a) * 520);
+    camera.lookAt(0, 330, 0);
+    G.race.update(dt, elapsed, false);
+    G.ads.update(elapsed);
+  }
+  endFrame();
+  const r0 = performance.now();
+  if (G) composer.render();
+  if (window.__perf) window.__perf.render = performance.now() - r0;
+}
+
+// ------------------------------------------------------------------ Boot
+initInput(canvas, () => {});
+canvas.addEventListener('click', () => {
+  if (started && !input.locked && !isPanelOpen()) requestLock(canvas);
+});
+$('pause').addEventListener('click', () => requestLock(canvas));
+addEventListener('keydown', (e) => {
+  if (e.code === 'Escape' && isPanelOpen()) closePanel();
+});
+
+function begin(fresh) {
+  if (fresh) {
+    try { localStorage.removeItem('coruscant-save-v1'); } catch { /* storage blocked */ }
+    if (G.resumed) { location.reload(); return; }
+  }
+  started = true;
+  $('title').classList.add('hidden');
+  $('hud').classList.remove('hidden');
+  initAudio();
+  requestLock(canvas);
+  if (!G.resumed || fresh) {
+    setTimeout(() => toast('Welcome to the city. You have 500 credits, a speeder on the East Pad, and rent due at 06:00.', 'info', 8000), 600);
+    setTimeout(() => toast('Earn credits at the Courier Guild (south-west). Spend them at the Lucky Comet Casino (north-east).', 'info', 8000), 3500);
+    setTimeout(() => toast('Your apartment is up the glass lift on the Spire\'s south face. Press H for controls.', 'info', 8000), 7000);
+  } else {
+    toast(`Welcome back. Day ${state.day}, ${state.credits} cr.`, 'info', 5000);
+  }
+}
+
+build().then((extra) => {
+  $('loading').classList.add('hidden');
+  $('start-buttons').classList.remove('hidden');
+  if (extra && extra.player) {
+    const c = $('btn-continue');
+    c.classList.remove('hidden');
+    c.textContent = `Continue · Day ${state.day}`;
+    c.onclick = () => begin(false);
+    $('btn-new').textContent = 'New life';
+    $('btn-new').classList.remove('primary');
+  }
+  $('btn-new').onclick = () => begin(true);
+  if (params.has('autostart')) begin(false);
+  // Hooks for automated testing.
+  window.__game = {
+    G, scene, camera, state, input,
+    // Advance the simulation without rendering (for automated tests).
+    step: (n, dt = 1 / 30) => { for (let i = 0; i < n; i++) { update(dt); endFrame(); } },
+    doAction: (action, data) => doAction({ action, data }),
+    nearest: () => nearestInteract(G.walker.pos), setMode: (m) => (m === 'fly' ? boardSpeeder() : exitSpeeder()), begin, world, interactables, get mode() { return mode; }, totalMinutes };
+});
+requestAnimationFrame(frame);

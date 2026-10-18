@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Coruscant</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2305070c'/%3E%3Cpath d='M16 3l3 26h-6z' fill='%237feaff'/%3E%3Cpath d='M6 29l3-14h3l-1 14zM26 29l-3-12h-3l1 12z' fill='%23ffc266'/%3E%3C/svg%3E" />
+    <meta name="description" content="An open-world life in a planet-wide city: walk the levels, fly the skylanes, work, gamble and live." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+
+    <div id="hud" class="hidden">
+      <div id="topleft" class="hud-box">
+        <div class="row-b"><span id="clock">18:20</span><span id="day">Day 1</span></div>
+        <div id="credits">500 cr</div>
+      </div>
+      <div id="compass"><div id="compass-strip"></div><div class="compass-tick"></div></div>
+      <div id="needs" class="hud-box">
+        <div class="need"><span>Energy</span><div class="bar"><i id="bar-energy"></i></div></div>
+        <div class="need"><span>Hunger</span><div class="bar"><i id="bar-hunger"></i></div></div>
+      </div>
+      <div id="job" class="hud-box">
+        <div class="job-kicker">Courier job</div>
+        <div class="job-cargo"></div>
+        <div class="job-dest"></div>
+        <div class="row-b"><span class="job-time"></span><span class="job-pay"></span></div>
+      </div>
+      <div id="flight" class="hud-box">
+        <div class="fl-row"><b id="spd">0</b><span>km/h</span></div>
+        <div class="fl-row"><b id="alt">0</b><span>m alt</span></div>
+        <div class="bar thr"><i id="thr"></i></div>
+      </div>
+      <div id="ticker"></div>
+      <div id="location"><div class="loc-name"></div><div class="loc-sub"></div></div>
+      <div id="prompt"></div>
+      <div id="speech"></div>
+      <div id="waypoint"><div class="wp-diamond">◆</div><div class="wp-dist"></div></div>
+      <div id="toasts"></div>
+      <div id="hint">[H] Help · [M] Map</div>
+    </div>
+
+    <div id="panel" class="panel"></div>
+
+    <div id="mapview" class="overlay hidden">
+      <canvas id="mapcanvas"></canvas>
+      <div class="map-legend">City map · ◆ job · ▪ rooftop decks · press M to close</div>
+    </div>
+
+    <div id="help" class="overlay hidden">
+      <div class="help-card">
+        <h2>Controls</h2>
+        <div class="cols">
+          <div>
+            <h3>On foot</h3>
+            <p><kbd>W A S D</kbd> walk · <kbd>Shift</kbd> run · <kbd>Space</kbd> jump</p>
+            <p><kbd>Mouse</kbd> look · <kbd>Wheel</kbd> zoom</p>
+            <p><kbd>E</kbd> interact / talk · <kbd>F</kbd> board speeder</p>
+          </div>
+          <div>
+            <h3>Flying</h3>
+            <p><kbd>W</kbd> throttle · <kbd>S</kbd> brake · <kbd>Shift</kbd> boost</p>
+            <p><kbd>Mouse</kbd> steer · <kbd>A D</kbd> strafe</p>
+            <p><kbd>Space</kbd> rise · <kbd>C</kbd> descend · <kbd>F</kbd> land</p>
+          </div>
+          <div>
+            <h3>Life</h3>
+            <p>Eat and sleep or you slow down. Rent is due every morning at 06:00.</p>
+            <p>Earn credits as a courier at the Guild. Lose them at the Lucky Comet.</p>
+            <p><kbd>M</kbd> map · <kbd>H</kbd> help · <kbd>Esc</kbd> release mouse</p>
+          </div>
+        </div>
+        <p class="muted">Press H to close.</p>
+      </div>
+    </div>
+
+    <div id="title" class="overlay">
+      <div class="title-card">
+        <div class="title-kicker">Capital of the known worlds</div>
+        <h1>CORUSCANT</h1>
+        <div class="title-sub">One city. One planet. One life.</div>
+        <div id="loading">
+          <div class="bar"><i id="load-bar"></i></div>
+          <div id="load-text">Raising the city…</div>
+        </div>
+        <div id="start-buttons" class="hidden">
+          <button id="btn-continue" class="btn primary big hidden">Continue</button>
+          <button id="btn-new" class="btn primary big">Begin a new life</button>
+        </div>
+        <div class="title-controls">
+          <span><kbd>WASD</kbd> move</span><span><kbd>Mouse</kbd> look</span><span><kbd>E</kbd> interact</span><span><kbd>F</kbd> speeder</span><span><kbd>M</kbd> map</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="pause" class="overlay hidden">
+      <div class="title-card small">
+        <h2>Paused</h2>
+        <p class="muted">Click to return to the city.</p>
+      </div>
+    </div>
+
+    <div id="fade"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
