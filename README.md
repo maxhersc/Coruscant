@@ -29,7 +29,11 @@ click again.
 | `E` interact / talk | `Space` rise, `C` descend |
 | `F` board your speeder | `F` land (slow down over a floor first) |
 
-`M` city map · `H` help · `Esc` close a panel or release the mouse.
+`M` city map · `H` help · `O` settings · `Esc` close a panel or release the mouse.
+
+Settings (`O`) has mouse sensitivity, inverted flight pitch and graphics
+quality. On **Auto**, the game measures its frame rate and lowers resolution
+and glow if it drops below 40 fps, raising them again when there is headroom.
 
 ## The city
 
@@ -111,8 +115,8 @@ camera all query the same hash.
 `tests/gameplay.mjs` drives every system in a real browser through
 `window.__game.step()`, which advances the simulation without rendering:
 walking, jumping, railings, the lift and its doors, food, courier jobs,
-flight and collisions, landing, delivery, the casino, Skyrace, rent, falling
-and sleep.
+flight and collisions, landing, delivery, the casino, Skyrace, rent, falling,
+sleep, settings and automatic quality.
 
 ```sh
 npm run build && npm run preview     # terminal 1

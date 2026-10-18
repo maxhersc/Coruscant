@@ -27,6 +27,7 @@ import { interactables, nearestInteract, npcZones, zoneAt, pads } from './system
 import { jobTarget, minutesLeft, GUILD } from './systems/jobs.js';
 import { saveGame, loadGame } from './systems/save.js';
 import * as acts from './systems/activities.js';
+import { settings, loadSettings, saveSettings, QUALITY } from './systems/settings.js';
 import { openRoulette, openBlackjack, openSlots, openDice } from './casino/games.js';
 import { createSkyrace } from './casino/races.js';
 import { openPanel, closePanel, isPanelOpen, onPanel, h } from './ui/panel.js';
@@ -42,8 +43,9 @@ const $ = (id) => document.getElementById(id);
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !LOW, logarithmicDepthBuffer: true, powerPreference: 'high-performance' });
 renderer.info.autoReset = false;
-const pixelRatio = Math.min(devicePixelRatio, LOW ? 1 : 1.5);
-renderer.setPixelRatio(pixelRatio);
+loadSettings();
+input.sensitivity = settings.sensitivity;
+renderer.setPixelRatio(Math.min(devicePixelRatio, LOW ? 1 : 1.5));
 renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
@@ -57,8 +59,44 @@ scene.add(hemi, sun, sun.target);
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), 0.7, 0.35, 0.95);
-if (!LOW && !params.has('nobloom')) composer.addPass(bloom);
+composer.addPass(bloom);
 composer.addPass(new OutputPass());
+
+// Quality: a fixed level, or 'auto', which steps down when frames run slow
+// and back up when there is headroom.
+let qualityLevel = LOW ? 2 : settings.quality === 'auto' ? 0 : Math.max(0, QUALITY.findIndex((q) => q.name === settings.quality));
+function applyQuality(level) {
+  qualityLevel = level;
+  const q = QUALITY[level];
+  renderer.setPixelRatio(Math.min(devicePixelRatio, q.pixelRatio));
+  renderer.setSize(innerWidth, innerHeight);
+  composer.setPixelRatio(Math.min(devicePixelRatio, q.pixelRatio));
+  composer.setSize(innerWidth, innerHeight);
+  bloom.enabled = q.bloom && !params.has('nobloom');
+}
+applyQuality(qualityLevel);
+const autoQ = { frames: 0, time: 0, slow: 0, fast: 0, last: performance.now() };
+function autoQuality() {
+  const now = performance.now();
+  autoQ.time += now - autoQ.last;
+  autoQ.last = now;
+  autoQ.frames++;
+  if (autoQ.time < 3000) return;
+  const fps = (autoQ.frames * 1000) / autoQ.time;
+  autoQ.frames = 0;
+  autoQ.time = 0;
+  if (settings.quality !== 'auto' || LOW || document.hidden) return;
+  autoQ.slow = fps < 40 ? autoQ.slow + 1 : 0;
+  autoQ.fast = fps > 58 ? autoQ.fast + 1 : 0;
+  if (autoQ.slow >= 2 && qualityLevel < QUALITY.length - 1) {
+    applyQuality(qualityLevel + 1);
+    autoQ.slow = 0;
+    toast(`Graphics lowered to ${QUALITY[qualityLevel].name} to keep things smooth. Press O for settings.`, 'info', 5000);
+  } else if (autoQ.fast >= 4 && qualityLevel > 0) {
+    applyQuality(qualityLevel - 1);
+    autoQ.fast = 0;
+  }
+}
 
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
@@ -66,6 +104,7 @@ addEventListener('resize', () => {
   renderer.setSize(innerWidth, innerHeight);
   composer.setSize(innerWidth, innerHeight);
   bloom.resolution.set(innerWidth / 2, innerHeight / 2);
+  applyQuality(qualityLevel);
 });
 
 // ------------------------------------------------------------------ World build
@@ -242,6 +281,40 @@ function doAction(it) {
   }
 }
 
+function openSettings() {
+  openPanel('Settings', (body) => {
+    const sensVal = h('span.bet-val', {}, settings.sensitivity.toFixed(2) + '×');
+    const sens = h('input', { type: 'range', id: 'set-sens', min: '0.3', max: '2.5', step: '0.05', value: String(settings.sensitivity) });
+    sens.oninput = () => {
+      settings.sensitivity = Number(sens.value);
+      input.sensitivity = settings.sensitivity;
+      sensVal.textContent = settings.sensitivity.toFixed(2) + '×';
+      saveSettings();
+    };
+    const inv = h('input', { type: 'checkbox', id: 'set-invert' });
+    inv.checked = settings.invertFlight;
+    inv.onchange = () => { settings.invertFlight = inv.checked; saveSettings(); };
+    const qRow = h('div.row.wrap');
+    const renderQ = () => {
+      qRow.replaceChildren(...['auto', 'high', 'medium', 'low'].map((q) => h('button.btn' + (settings.quality === q ? '.primary' : ''), {
+        onclick: () => {
+          settings.quality = q;
+          saveSettings();
+          if (q !== 'auto') applyQuality(QUALITY.findIndex((x) => x.name === q));
+          renderQ();
+        },
+      }, q[0].toUpperCase() + q.slice(1))));
+    };
+    renderQ();
+    body.append(
+      h('div.row', {}, h('label.label', { for: 'set-sens' }, 'Mouse sensitivity'), sens, sensVal),
+      h('div.row', {}, inv, h('label', { for: 'set-invert' }, 'Invert flight pitch (pull back to climb)')),
+      h('div', {}, h('div.label', {}, 'Graphics'), qRow),
+      h('p.muted', {}, `Auto lowers resolution and glow if the frame rate drops, and raises them again when there is headroom. Now running: ${QUALITY[qualityLevel].name}.`)
+    );
+  }, { kicker: 'Press O any time' });
+}
+
 function openLiftPanel() {
   const el = G.elevator;
   openPanel('Spire Lift', (body) => {
@@ -401,6 +474,7 @@ function update(dt) {
   // Toggles.
   if (pressed('KeyM')) { mapOpen = !mapOpen; $('mapview').classList.toggle('hidden', !mapOpen); }
   if (pressed('KeyH')) { helpOpen = !helpOpen; $('help').classList.toggle('hidden', !helpOpen); }
+  if (pressed('KeyO')) openSettings();
 
   // Lift.
   const el = G.elevator;
@@ -542,6 +616,7 @@ let fpsFrames = 0, fpsTime = 0;
 function frame() {
   requestAnimationFrame(frame);
   const dt = Math.min(clock.getDelta(), 0.1);
+  if (started) autoQuality();
   fpsFrames++;
   fpsTime += dt;
   if (fpsTime > 1) { window.__fps = fpsFrames / fpsTime; fpsFrames = 0; fpsTime = 0; }
@@ -629,6 +704,6 @@ build().then((extra) => {
     // Advance the simulation without rendering (for automated tests).
     step: (n, dt = 1 / 30) => { for (let i = 0; i < n; i++) { update(dt); endFrame(); } },
     doAction: (action, data) => doAction({ action, data }),
-    nearest: () => nearestInteract(G.walker.pos), setMode: (m) => (m === 'fly' ? boardSpeeder() : exitSpeeder()), begin, world, interactables, get mode() { return mode; }, totalMinutes };
+    nearest: () => nearestInteract(G.walker.pos), setMode: (m) => (m === 'fly' ? boardSpeeder() : exitSpeeder()), begin, world, interactables, get mode() { return mode; }, get quality() { return QUALITY[qualityLevel].name; }, openSettings, totalMinutes };
 });
 requestAnimationFrame(frame);

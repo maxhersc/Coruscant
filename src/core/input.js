@@ -10,6 +10,7 @@ export const input = {
   locked: false,
   lockFailed: false, // the browser refused pointer lock: look by dragging instead
   mouseDown: false,
+  sensitivity: 1,
   enabled: true,
 };
 
@@ -24,8 +25,8 @@ export function initInput(canvas, onLockChange) {
   window.addEventListener('blur', () => input.keys.clear());
   window.addEventListener('mousemove', (e) => {
     if (!input.locked && !(input.lockFailed && input.mouseDown)) return;
-    input.mouseDX += e.movementX || 0;
-    input.mouseDY += e.movementY || 0;
+    input.mouseDX += (e.movementX || 0) * input.sensitivity;
+    input.mouseDY += (e.movementY || 0) * input.sensitivity;
   });
   window.addEventListener('wheel', (e) => { input.wheel += Math.sign(e.deltaY); }, { passive: true });
   canvas.addEventListener('mousedown', () => { input.mouseDown = true; });

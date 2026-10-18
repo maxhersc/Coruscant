@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { world } from '../core/collision.js';
 import { input, key } from '../core/input.js';
 import { stdMat, glowMat } from '../world/env.js';
+import { settings } from '../systems/settings.js';
 
 export const SPEEDER_MODELS = {
   courier: { name: 'Mk-II Courier', price: 0, maxSpeed: 95, boost: 150, accel: 1.6, turn: 1.0, color: 0xb8a27a, accent: 0xff8833, blurb: 'Reliable, slow, paid off.' },
@@ -128,7 +129,7 @@ export class Speeder {
     if (key('ArrowRight')) turn -= 1.3 * dt * s.turn;
     this.yaw += turn;
     this.yawRate = THREE.MathUtils.lerp(this.yawRate, turn / Math.max(dt, 1e-3), 1 - Math.exp(-dt * 6));
-    let dp = -input.mouseDY * 0.0018 * s.turn;
+    let dp = -input.mouseDY * 0.0018 * s.turn * (settings.invertFlight ? -1 : 1);
     if (key('ArrowUp')) dp += 0.9 * dt;
     if (key('ArrowDown')) dp -= 0.9 * dt;
     this.pitch = THREE.MathUtils.clamp(this.pitch + dp, -1.1, 1.1);

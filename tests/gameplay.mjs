@@ -249,6 +249,28 @@ r = await ev(async () => {
 });
 check('sleep until morning', r.energy > 99 && Math.abs(r.minutes - 420) < 2 && r.dayDelta === 1, JSON.stringify(r));
 
+// 17. Settings panel opens, and sensitivity scales mouse look.
+await ev(() => window.__game.openSettings());
+await page.fill('#set-sens', '2');
+await page.dispatchEvent('#set-sens', 'input');
+r = await ev(() => ({ sens: window.__game.input.sensitivity, panel: !!document.querySelector('#panel.open #set-invert') }));
+check('settings change mouse sensitivity', r.sens === 2 && r.panel, JSON.stringify(r));
+await page.keyboard.press('Escape');
+
+// 18. Auto quality steps down when frames are slow (a software renderer is).
+// Its own page, without ?low, so it starts at high.
+{
+  await page.close();
+  const p2 = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  await p2.goto(`${url}/?nolock&autostart`, { waitUntil: 'commit', timeout: 120000 });
+  await p2.waitForFunction(() => window.__game, null, { timeout: 240000 });
+  const before = await p2.evaluate(() => window.__game.quality);
+  await p2.waitForFunction(() => window.__game.quality !== 'high', null, { timeout: 60000 }).catch(() => {});
+  const after = await p2.evaluate(() => window.__game.quality);
+  check('auto quality lowers settings on a slow renderer', before === 'high' && after !== 'high', `${before} -> ${after}`);
+  await p2.close();
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (errors.length) console.log('ERRORS:\n' + errors.slice(0, 10).join('\n'));
 await browser.close();
