@@ -17,6 +17,7 @@ import { createTraffic, nearestCraft } from './world/traffic.js';
 import { createBeacons } from './world/beacons.js';
 import { createAds } from './world/ads.js';
 import { createFlyers } from './world/flyers.js';
+import { createAtmosphere } from './world/atmosphere.js';
 import { createCrowd } from './npc/crowd.js';
 import { Walker } from './player/walker.js';
 import { Speeder, SPEEDER_MODELS } from './player/speeder.js';
@@ -95,6 +96,8 @@ async function build() {
   scene.add(createBeacons(city.beacons));
   const ads = createAds(city.segs);
   scene.add(ads.group);
+  const atmosphere = createAtmosphere(city.segs);
+  scene.add(atmosphere.group);
   await step(70, 'Waking two trillion residents…');
   const crowd = createCrowd(npcZones);
   scene.add(crowd.group);
@@ -107,7 +110,7 @@ async function build() {
   initMap(city.segs);
   await step(92, 'Compiling shaders…');
 
-  G = { city, district, traffic, ads, crowd, walker, speeder, rig, race, flyers, elevator: district.elevator };
+  G = { city, district, traffic, ads, atmosphere, crowd, walker, speeder, rig, race, flyers, elevator: district.elevator };
 
   // Place the player (from a save, or fresh on the promenade).
   const extra = loadGame();
@@ -466,6 +469,7 @@ function update(dt) {
   G.crowd.update(dt, w.pos, camera.position);
   G.ads.update(elapsed);
   G.flyers.update(dt, elapsed, s.parked ? s.pos : null);
+  G.atmosphere.update(elapsed, camera);
   G.race.update(dt, elapsed, focus.length() < 1500);
   for (const o of G.district.spinners) o.rotation.y += o.userData.spin * dt;
   if (G.district.rouletteWheel) {
@@ -564,6 +568,7 @@ function frame() {
     G.race.update(dt, elapsed, false);
     G.ads.update(elapsed);
     G.flyers.update(dt, elapsed, null);
+    G.atmosphere.update(elapsed, camera);
   }
   endFrame();
   const r0 = performance.now();

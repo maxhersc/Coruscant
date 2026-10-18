@@ -52,6 +52,8 @@ click again.
   towers over 1.5 km tall.
 - **A crowd of about 600** people and droids who wander, stop, step aside and
   talk to you.
+- **Weather and light**: a cloud deck wraps the lower city, lit by the sun
+  by day and by the city's glow at night, and searchlights sweep the night sky.
 - **Day and night**: a 12-minute day. Dusk is when the city looks its best.
 
 ## Living there
@@ -87,6 +89,7 @@ src/
     towerMaterial.js   the one shader every tower uses (windows, bands, fog)
     traffic.js         GPU skylane traffic
     flyers.js          taxis and police that route along the streets
+    atmosphere.js      cloud decks and searchlights
     district.js        the Spire hub's four levels and the rooftop decks
     elevator.js        the glass lift
     props.js           prop builders (rails, rooms, stalls, signs, pads)

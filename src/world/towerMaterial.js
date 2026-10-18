@@ -118,7 +118,13 @@ export function createTowerMaterial(isCylinder) {
           // Lights go on and off slowly through the night.
           float flick = h21(id.yx + floor(uTime / 40.0 + hh * 9.0));
           float on = step(hh, lit) * step(0.04, flick);
-          float onM = mix(lit, on, detail);
+          // Three levels of detail: single windows up close, blocks of 2 x 2
+          // windows lit or dark further out (and on faces seen edge-on), and
+          // a flat average only once even those blocks are under a pixel.
+          vec2 idc = floor(g / 2.0);
+          float onC = step(h21(idc + vec2(seed * 31.0, seed * 17.0)), lit);
+          float mid = clamp(1.6 - max(fw.x, fw.y) * 1.1, 0.0, 1.0);
+          float onM = mix(mix(lit, onC, mid), on, detail);
           vec3 wc = mix(vec3(0.95, 0.66, 0.38), windowColor(h21(id * 1.7 + seed)), detail);
 
           // By day glass reflects the sky; by night it shows the lights inside.
@@ -140,12 +146,14 @@ export function createTowerMaterial(isCylinder) {
             interior *= 1.0 - 0.8 * max(body, headS);
           }
           interior = mix(1.0, interior, detail);
-          col += winM * onM * wc * emit * interior;
+          // Far away a facade averages to a glow; keep it dimmer than up close
+          // so distant towers stay dark silhouettes dotted with light.
+          col += winM * onM * wc * emit * interior * mix(0.5, 1.0, detail);
 
           if (band > 0.5) {
             float period = 36.0 + floor(seed * 4.0) * 12.0;
-            float b = smoothstep(0.0, 0.5, 1.0 - abs(mod(vWp.y, period) - 1.0) / 1.0);
-            col = mix(col, bandColor(band) * (0.25 + 1.3 * night), b * 0.8);
+            float b = smoothstep(0.0, 0.5, 1.0 - abs(mod(vWp.y, period) - 1.0) / 0.6);
+            col = mix(col, bandColor(band) * (0.25 + 0.9 * night), b * 0.8);
           }
         }
 

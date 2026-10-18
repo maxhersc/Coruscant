@@ -45,7 +45,7 @@ vec3 applyFog(vec3 col, vec3 wp) {
   float density = uFogDensity * (1.0 + 5.0 * low);
   float f = 1.0 - exp(-dist * density);
   vec3 fc = skyColor(dir);
-  fc = mix(fc, uGlow * (0.38 + 0.6 * uNight), low * 0.7);
+  fc = mix(fc, uGlow * (0.38 + 0.2 * uNight), low * 0.7);
   return mix(col, fc, f);
 }
 `;
