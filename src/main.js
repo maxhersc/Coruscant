@@ -16,6 +16,7 @@ import { initMaterials } from './world/props.js';
 import { createTraffic, nearestCraft } from './world/traffic.js';
 import { createBeacons } from './world/beacons.js';
 import { createAds } from './world/ads.js';
+import { createFlyers } from './world/flyers.js';
 import { createCrowd } from './npc/crowd.js';
 import { Walker } from './player/walker.js';
 import { Speeder, SPEEDER_MODELS } from './player/speeder.js';
@@ -39,7 +40,7 @@ const $ = (id) => document.getElementById(id);
 // ------------------------------------------------------------------ Renderer
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !LOW, logarithmicDepthBuffer: true, powerPreference: 'high-performance' });
-renderer.info.autoReset = true;
+renderer.info.autoReset = false;
 const pixelRatio = Math.min(devicePixelRatio, LOW ? 1 : 1.5);
 renderer.setPixelRatio(pixelRatio);
 renderer.setSize(innerWidth, innerHeight);
@@ -102,10 +103,11 @@ async function build() {
   const speeder = new Speeder(scene, 'courier');
   const rig = new CameraRig(camera);
   const race = createSkyrace(scene, district.raceBoard, sfx, toast);
+  const flyers = createFlyers(scene);
   initMap(city.segs);
   await step(92, 'Compiling shaders…');
 
-  G = { city, district, traffic, ads, crowd, walker, speeder, rig, race, elevator: district.elevator };
+  G = { city, district, traffic, ads, crowd, walker, speeder, rig, race, flyers, elevator: district.elevator };
 
   // Place the player (from a save, or fresh on the promenade).
   const extra = loadGame();
@@ -463,6 +465,7 @@ function update(dt) {
   const focus = mode === 'fly' ? s.pos : w.pos;
   G.crowd.update(dt, w.pos, camera.position);
   G.ads.update(elapsed);
+  G.flyers.update(dt, elapsed, s.parked ? s.pos : null);
   G.race.update(dt, elapsed, focus.length() < 1500);
   for (const o of G.district.spinners) o.rotation.y += o.userData.spin * dt;
   if (G.district.rouletteWheel) {
@@ -546,22 +549,31 @@ function frame() {
     else ENV.uTime.value = elapsed;
     window.__perf = window.__perf || { update: 0, render: 0 };
     window.__perf.update = performance.now() - t0;
-    window.__perf.calls = renderer.info.render.calls;
+
   } else if (G) {
     // Title screen: a slow orbit around the Spire.
     elapsed += dt;
     ENV.uTime.value = elapsed;
     updateEnvironment(state.minutes, sun, hemi);
-    const a = elapsed * 0.03 + 0.6;
-    camera.position.set(Math.cos(a) * 520, 420 + Math.sin(elapsed * 0.05) * 40, Math.sin(a) * 520);
-    camera.lookAt(0, 330, 0);
+    // Circle the hub in the clear air between the Spire and its four
+    // framing towers, looking out over the city.
+    const a = elapsed * 0.035 + 0.6;
+    camera.position.set(Math.cos(a) * 150, 375 + Math.sin(elapsed * 0.07) * 15, Math.sin(a) * 150);
+    const b = a + 0.55;
+    camera.lookAt(Math.cos(b) * 1000, 290, Math.sin(b) * 1000);
     G.race.update(dt, elapsed, false);
     G.ads.update(elapsed);
+    G.flyers.update(dt, elapsed, null);
   }
   endFrame();
   const r0 = performance.now();
+  renderer.info.reset();
   if (G) composer.render();
-  if (window.__perf) window.__perf.render = performance.now() - r0;
+  if (window.__perf) {
+    window.__perf.render = performance.now() - r0;
+    window.__perf.calls = renderer.info.render.calls;
+    window.__perf.tris = renderer.info.render.triangles;
+  }
 }
 
 // ------------------------------------------------------------------ Boot

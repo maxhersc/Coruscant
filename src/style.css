@@ -224,10 +224,10 @@ kbd {
 /* Overlays */
 .overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 30; }
 #title { background: radial-gradient(ellipse at 50% 120%, rgba(255, 120, 50, 0.25), transparent 60%), linear-gradient(180deg, rgba(4, 6, 14, 0.75), rgba(4, 6, 14, 0.35) 50%, rgba(4, 6, 14, 0.85)); }
-.title-card { text-align: center; padding: 24px; max-width: 760px; }
+.title-card { text-align: center; padding: 24px; max-width: min(1100px, 94vw); }
 .title-card.small { background: var(--glass-strong); border: 1px solid var(--line); border-radius: 10px; padding: 24px 40px; }
 .title-kicker { font-family: var(--hud-font); letter-spacing: 6px; text-transform: uppercase; color: var(--amber); font-weight: 700; font-size: 15px; }
-.title-card h1 { font-family: var(--hud-font); font-size: clamp(54px, 12vw, 128px); margin: 4px 0; letter-spacing: clamp(6px, 2vw, 22px); font-weight: 700; background: linear-gradient(180deg, #fff, #9fdcff 60%, #4aa8d8); -webkit-background-clip: text; background-clip: text; color: transparent; text-shadow: 0 0 60px rgba(127, 234, 255, 0.25); }
+.title-card h1 { font-family: var(--hud-font); font-size: clamp(44px, 10vw, 120px); margin: 4px 0; white-space: nowrap; letter-spacing: clamp(4px, 1.5vw, 18px); padding-left: clamp(4px, 1.5vw, 18px); font-weight: 700; background: linear-gradient(180deg, #fff, #9fdcff 60%, #4aa8d8); -webkit-background-clip: text; background-clip: text; color: transparent; text-shadow: 0 0 60px rgba(127, 234, 255, 0.25); }
 .title-card h2 { font-family: var(--hud-font); font-size: 34px; margin: 0 0 8px; letter-spacing: 3px; }
 .title-sub { font-size: 18px; color: var(--muted); margin-bottom: 28px; letter-spacing: 1px; }
 #loading { width: min(360px, 80vw); margin: 0 auto; }

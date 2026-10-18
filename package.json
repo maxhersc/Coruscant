@@ -6,12 +6,14 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node tests/gameplay.mjs"
   },
   "dependencies": {
     "three": "0.184.0"
   },
   "devDependencies": {
+    "playwright-core": "1.56.1",
     "vite": "7.3.5"
   }
 }

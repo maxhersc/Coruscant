@@ -102,21 +102,21 @@ export function createCrowd(zones) {
   // instanced mesh so limbs can swing. Droids are a single shell.
   const nonIdx = (g) => (g.index ? g.toNonIndexed() : g);
   const coatGeo = mergeGeometries([
-    new THREE.CapsuleGeometry(0.2, 0.36, 4, 10).translate(0, 1.22, 0),
-    new THREE.CylinderGeometry(0.21, 0.27, 0.42, 10).translate(0, 0.86, 0),
+    new THREE.CapsuleGeometry(0.2, 0.36, 2, 8).translate(0, 1.22, 0),
+    new THREE.CylinderGeometry(0.21, 0.27, 0.42, 8).translate(0, 0.86, 0),
     new THREE.BoxGeometry(0.5, 0.11, 0.24).translate(0, 1.46, 0),
   ].map(nonIdx));
   const robeGeo = mergeGeometries([
-    new THREE.CapsuleGeometry(0.2, 0.36, 4, 10).translate(0, 1.22, 0),
-    new THREE.CylinderGeometry(0.2, 0.34, 1.05, 12).translate(0, 0.55, 0),
+    new THREE.CapsuleGeometry(0.2, 0.36, 2, 8).translate(0, 1.22, 0),
+    new THREE.CylinderGeometry(0.2, 0.34, 1.05, 8).translate(0, 0.55, 0),
     new THREE.BoxGeometry(0.5, 0.11, 0.24).translate(0, 1.46, 0),
   ].map(nonIdx));
-  const headGeo = new THREE.SphereGeometry(0.135, 12, 10);
-  const legGeo = new THREE.CapsuleGeometry(0.075, 0.68, 4, 8).translate(0, -0.42, 0);
-  const armGeo = new THREE.CapsuleGeometry(0.06, 0.5, 4, 8).translate(0, -0.3, 0);
+  const headGeo = new THREE.SphereGeometry(0.135, 10, 7);
+  const legGeo = new THREE.CapsuleGeometry(0.075, 0.68, 1, 6).translate(0, -0.42, 0);
+  const armGeo = new THREE.CapsuleGeometry(0.06, 0.5, 1, 6).translate(0, -0.3, 0);
   const tailGeo = mergeGeometries([
-    new THREE.CapsuleGeometry(0.05, 0.5, 4, 6).translate(-0.07, -0.25, 0),
-    new THREE.CapsuleGeometry(0.05, 0.42, 4, 6).translate(0.07, -0.21, 0),
+    new THREE.CapsuleGeometry(0.05, 0.5, 1, 5).translate(-0.07, -0.25, 0),
+    new THREE.CapsuleGeometry(0.05, 0.42, 1, 5).translate(0.07, -0.21, 0),
   ].map(nonIdx));
   const droidGeo = mergeGeometries([
     new THREE.CylinderGeometry(0.26, 0.3, 0.9, 12).translate(0, 0.55, 0),
