@@ -20,13 +20,14 @@ import { createFlyers } from './world/flyers.js';
 import { createAtmosphere } from './world/atmosphere.js';
 import { createCrowd } from './npc/crowd.js';
 import { Walker } from './player/walker.js';
-import { Speeder, SPEEDER_MODELS } from './player/speeder.js';
+import { Speeder, SPEEDER_MODELS, PAINTS } from './player/speeder.js';
+import { playerLook, wearing, openBoutique } from './systems/wardrobe.js';
 import { CameraRig } from './player/cameraRig.js';
 import { state, tick, hooks, addCredits, bodySpeedMul, totalMinutes } from './systems/state.js';
 import { interactables, nearestInteract, npcZones, zoneAt, pads } from './systems/interact.js';
 import { minutesLeft, GUILD, passengerOf } from './systems/jobs.js';
 import * as jobs from './systems/jobs.js';
-import { police, updatePolice, openStop, heatStatus, carrying } from './systems/police.js';
+import { police, updatePolice, openStop, heatStatus, carrying, initPolice, crime, clearHeat } from './systems/police.js';
 import { saveGame, loadGame } from './systems/save.js';
 import * as acts from './systems/activities.js';
 import { settings, loadSettings, saveSettings, QUALITY } from './systems/settings.js';
@@ -42,6 +43,11 @@ import { updateHUD, toast, showLocation, setPrompt, speech } from './ui/hud.js';
 import { initMap, drawMap, setupMap } from './ui/map.js';
 import { nav, buildPlaces, guidance, arrived, setTarget, clearTarget } from './systems/nav.js';
 import { initAudio, updateAudio, sfx } from './audio/audio.js';
+import { batchStatic } from './world/batch.js';
+import { buildInteriors, buildEntrances, buildShopfronts, INTERIORS, SHOPFRONTS } from './world/interiors.js';
+import { buildHomes, HOMES, DAILY, ownsHome, openRealty, openArt, homePos, buyHome } from './world/homes.js';
+import { openPoker, openDance, openDodger, openSlicer, openEatOff, scoreHand, makeGrid } from './games/minigames.js';
+import { hasBuff } from './systems/state.js';
 
 const params = new URLSearchParams(location.search);
 const LOW = params.has('low');
@@ -139,6 +145,18 @@ async function build() {
   scene.add(district.group);
   const shelf = buildUndercity();
   scene.add(shelf.group);
+  // Doors into buildings, the rooms behind them, and homes for sale.
+  const doors = new THREE.Group();
+  buildEntrances(doors);
+  buildShopfronts(doors);
+  batchStatic(doors);
+  scene.add(doors);
+  const interiors = buildInteriors(scene);
+  // One lamp follows you indoors; outside it is switched off (left in the
+  // scene so the shaders never recompile).
+  const indoorLight = new THREE.PointLight(0xffffff, 0, 60, 1.4);
+  scene.add(indoorLight);
+  const homes = buildHomes(scene, { monolith: city.monoliths[0], frame: district.frames[0] });
   await step(40, 'Lighting the windows…');
   scene.add(buildCityMeshes(city.segs));
   scene.add(buildCityMeshes(city.far));
@@ -161,6 +179,7 @@ async function build() {
   const rig = new CameraRig(camera);
   const race = createSkyrace(scene, district.raceBoard, sfx, toast);
   const flyers = createFlyers(scene);
+  initPolice(scene);
   const gaterun = createGateRun(race.gates, race.courseLength, sfx, toast);
   const people = createPeople(scene, {
     openLoan: () => acts.openLoan(ctx),
@@ -186,6 +205,8 @@ async function build() {
   nav.places = buildPlaces(speeder, [
     ...people.people.filter((p) => !p.visible).map((p) => ({ name: p.name, get pos() { return p.talkAt || p.pos; }, group: 'People', hint: p.title, level: Math.hypot(p.pos.x, p.pos.z) < 170 ? p.pos.y : undefined })),
     { name: 'Undercity Shelf', pos: shelf.center, group: 'Hidden places', hint: 'An old platform below the clouds' },
+    ...Object.entries(HOMES).map(([id, d]) => ({ name: d.name, get pos() { return homePos(id).door; }, group: 'Homes', get hint() { return ownsHome(id) ? `Yours · ${d.where}` : `For sale, ${d.price.toLocaleString()} cr · ${d.where}`; } })),
+    ...SHOPFRONTS.map((f) => ({ name: f.label.replace(/^the /, 'The '), pos: new THREE.Vector3(f.x, LEVELS.market, -82.6), group: 'Shops', hint: `${f.hint} · Galleria Market`, level: LEVELS.market })),
     ...interactables.filter((it) => (it.action === 'shop' && !it.data.shop.startsWith('deck:')) || it.action === 'chips').map((it) => {
       const def = trade.shopDef(it.action === 'chips' ? 'chips' : it.data.shop);
       return { name: def.name, pos: it.pos, group: 'Shops', hint: `Buys and sells · ${def.where}`, level: Math.hypot(it.pos.x, it.pos.z) < 170 ? it.pos.y : undefined };
@@ -195,11 +216,13 @@ async function build() {
   $('map-center').onclick = () => mapUI.recenter();
   await step(92, 'Compiling shaders…');
 
-  G = { beacon, city, district, traffic, ads, atmosphere, crowd, walker, speeder, rig, race, flyers, gaterun, people, shelf, elevator: district.elevator };
+  G = { beacon, city, district, traffic, ads, atmosphere, crowd, walker, speeder, rig, race, flyers, gaterun, people, shelf, interiors, homes, indoorLight, elevator: district.elevator };
 
   // Place the player (from a save, or fresh on the promenade).
   const extra = loadGame();
-  speeder.setModel(SPEEDER_MODELS[state.speeder] ? state.speeder : 'courier');
+  if (!SPEEDER_MODELS[state.speeder]) state.speeder = 'courier';
+  speeder.setModel(state.speeder, paintFor(state.speeder));
+  dress();
   if (extra && extra.player) {
     walker.place(...extra.player, 0);
     if (extra.speeder) speeder.park(extra.speeder.x, extra.speeder.groundY, extra.speeder.z, extra.speeder.yaw);
@@ -209,6 +232,7 @@ async function build() {
     speeder.park(132, LEVELS.promenade, 0, -Math.PI / 2);
   }
   rig.yaw = Math.PI / 2;
+  if (state.inside && INTERIORS[state.inside.id]) lightIndoors(INTERIORS[state.inside.id]);
   if (params.has('t')) state.minutes = Number(params.get('t')) * 60;
 
   // Warm up: one render compiles every program before the player sees it.
@@ -327,10 +351,11 @@ const ctx = {
   fade,
   save,
   saveExtra: () => saveExtra(),
+  dress: () => dress(),
   setSpeederModel: (id) => {
     const s = G.speeder;
     const parked = { x: s.pos.x, y: s.groundY, z: s.pos.z, yaw: s.yaw };
-    s.setModel(id);
+    s.setModel(id, paintFor(id));
     if (mode !== 'fly') s.park(parked.x, parked.y, parked.z, parked.yaw);
   },
   afterSleep: (mins) => {
@@ -338,6 +363,21 @@ const ctx = {
   },
   event: (name, data) => story.emit(name, data),
 };
+
+// The paint job on a speeder, as overrides for its model.
+function paintFor(id) {
+  const i = state.paint && state.paint[id];
+  if (!i) return {};
+  const [, color, accent] = PAINTS[i];
+  return { color, accent };
+}
+
+// Put the player's clothes on the model, and what they let you do.
+function dress() {
+  const w = G.walker;
+  w.setLook(playerLook());
+  w.abilities = { runner: wearing('runner'), jet: wearing('jet'), glide: wearing('glide') };
+}
 
 // Vool's collectors: if you run, you have 25 seconds to reach your speeder.
 let escapeUntil = 0;
@@ -367,19 +407,59 @@ function updateEscape() {
 // one pulls you over.
 let sirenT = 0;
 const policeHooks = {
-  alert: (d) => {
+  alert: (d, reason) => {
     toast(d < 380
-      ? 'Spire Security scanned your cargo! A patrol is on your tail. Boost away, or dive below the clouds.'
-      : `Your cargo tripped a security scanner. A patrol is on its way, ${(d / 1000).toFixed(1)} km out.`, 'bad', 7000);
+      ? `${reason}! Spire Security is on your tail. Boost away, break their line of sight, or dive below the clouds.`
+      : `${reason}. A patrol is on its way, ${(d / 1000).toFixed(1)} km out.`, 'bad', 7000);
     sfx('alert');
   },
-  lost: () => { toast('You lost the patrol. Breathe.', 'win', 5000); sfx('win'); },
+  escalate: (stars) => {
+    toast(`${'★'.repeat(stars)} Wanted level ${stars}. More patrols are joining the chase.`, 'bad', 5000);
+    sfx('alert');
+  },
+  lost: (stars, cred) => {
+    toast(`You lost the patrol${stars > 1 ? 's' : ''}. Breathe.${cred ? ` The Undercity heard about it: +${cred} cr in street cred.` : ''}`, 'win', 6000);
+    sfx('win');
+  },
   stop: () => {
     if (mode === 'fly') { G.speeder.speed = 0; G.speeder.vel.set(0, 0, 0); }
     sfx('alert');
-    openStop({ toast, sfx, release: () => {}, flying: () => mode === 'fly' });
+    openStop({ toast, sfx, release: () => {}, flying: () => mode === 'fly', jail: nightInCells });
   },
+  // A stun bolt knocks most of your speed away.
+  stun: () => {
+    const s = G.speeder;
+    const armor = wearing('armor');
+    s.speed *= armor ? 0.65 : 0.3;
+    s.vel.multiplyScalar(armor ? 0.7 : 0.35);
+    G.rig.shake = 1.1;
+    sfx('bump');
+    toast('Stun bolt! Your engines stutter.', 'bad', 1800);
+    if (state.job && state.job.fragile) onBump(30);
+  },
+  // A pursuer slams into your flank.
+  ram: (f) => {
+    const s = G.speeder;
+    const push = s.pos.clone().sub(f.pos).setY(0).normalize().multiplyScalar(wearing('armor') ? 14 : 28);
+    s.vel.add(push);
+    s.speed *= 0.7;
+    G.rig.shake = 0.9;
+    bumpCooldown = 0;
+    onBump(22);
+  },
+  velocity: () => (mode === 'fly' ? G.speeder.vel : new THREE.Vector3()),
+  shot: () => sfx('zap'),
 };
+
+// Three stars and caught: a night in a holding cell.
+function nightInCells() {
+  fade(() => {
+    state.minutes += 10 * 60;
+    if (state.minutes >= 1440) { state.minutes -= 1440; state.day += 1; }
+    state.hunger = Math.max(5, state.hunger - 30);
+    toast('You spend a long night in a Spire Security holding cell. They let you out at dawn, with a warning.', 'bad', 8000);
+  }, 1200);
+}
 
 // A passenger talks while you fly.
 function updatePassenger(dt) {
@@ -423,6 +503,171 @@ function searchCache() {
   }
 }
 
+// ------------------------------------------------------------------ Inside buildings
+const DRESS_CODE = { noble: 'The doorman looks you up and down. "The salon is formal wear only." (Threads, in the Galleria Market, can fix that.)', embassy: 'A guard droid blocks the door. "Visitors must be formally dressed." (Try Threads in the Galleria Market.)' };
+function enterInterior(data) {
+  const def = INTERIORS[data.interior];
+  if (!def) return;
+  if (DRESS_CODE[data.interior] && !wearing('formal')) { toast(DRESS_CODE[data.interior], 'bad', 7000); sfx('lose'); return; }
+  if (data.interior === 'club' && !wearing('party')) {
+    if (state.credits < 20) { toast('The bouncer wants a 20 cr cover. You do not have it.', 'bad'); sfx('lose'); return; }
+    addCredits(-20, 'Club cover charge');
+  }
+  fade(() => {
+    state.inside = { id: data.interior, back: data.back, venue: data.venue };
+    def.setName(data.venue);
+    lightIndoors(def);
+    G.walker.place(def.entry.x, def.entry.y, def.entry.z, 0);
+    G.rig.yaw = 0;
+    G.rig.pitch = -0.1;
+    toast(`Inside ${data.venue.replace(/\b\w+/g, (w) => w[0] + w.slice(1).toLowerCase())}.`, 'info', 3000);
+  }, 400);
+}
+function exitInterior() {
+  const b = state.inside && state.inside.back;
+  fade(() => {
+    state.inside = null;
+    G.indoorLight.intensity = 0;
+    if (b) G.walker.place(b[0], b[1], b[2], 0);
+    else G.walker.place(68, LEVELS.promenade, 0, Math.PI / 2);
+    G.rig.yaw = 0;
+  }, 400);
+}
+
+function lightIndoors(def) {
+  G.indoorLight.position.copy(def.lamp);
+  G.indoorLight.color.set(def.light);
+  G.indoorLight.intensity = 260;
+}
+
+function buyHomeFor(id) { return buyHome(id); }
+
+const realtyCtx = {
+  toast, sfx,
+  waypoint: (id) => { setTarget({ name: HOMES[id].name, pos: homePos(id).door }); toast(`Waypoint set: ${HOMES[id].name}.`, 'info'); },
+};
+
+// The medic: patch you up, or give you a new look.
+const SKINS = [0xf1c8a8, 0xd9a07a, 0xc68e6a, 0x9a6a4a, 0x6a4430, 0x8ab0d8, 0x7ac08a];
+const HAIRS = [0x2a1a12, 0x6a3a1a, 0xd8b060, 0xe8e8e8, 0xff3399, 0x33ddff, 0x55ff88];
+function openClinic() {
+  openPanel('Duty medic', (body) => {
+    const render = () => {
+      body.replaceChildren(
+        h('p.muted', {}, 'Patch-ups, stim drips, and the city\'s quickest cosmetic work.'),
+        h('div.menu-item', {}, h('div', {}, h('b', {}, 'Full treatment'), h('div.muted', {}, 'Energy to full and a nutrient drip. Takes an hour.')),
+          h('button.btn.primary', { onclick: () => {
+            if (state.credits < 60) { toast('Not enough credits.', 'bad'); sfx('lose'); return; }
+            addCredits(-60, 'Clinic treatment');
+            state.energy = 100;
+            state.hunger = Math.max(state.hunger, 70);
+            state.minutes = (state.minutes + 60) % 1440;
+            sfx('win');
+            toast('You leave the clinic feeling brand new.', 'win');
+          } }, '60 cr')),
+        h('div.label', {}, 'New skin tone · 100 cr'),
+        h('div.row.wrap', {}, ...SKINS.map((c) => h('button.btn', { onclick: () => restyle({ skin: c }, 100) }, h('span.swatch', { style: `background:#${c.toString(16).padStart(6, '0')}` })))),
+        h('div.label', {}, 'New hair colour · 60 cr'),
+        h('div.row.wrap', {}, ...HAIRS.map((c) => h('button.btn', { onclick: () => restyle({ hairColor: c }, 60) }, h('span.swatch', { style: `background:#${c.toString(16).padStart(6, '0')}` })))));
+    };
+    const restyle = (change, price) => {
+      if (state.credits < price) { toast('Not enough credits.', 'bad'); sfx('lose'); return; }
+      addCredits(-price, 'Cosmetic clinic');
+      state.look = { ...(state.look || {}), ...change };
+      dress();
+      sfx('coin');
+      render();
+    };
+    render();
+  }, { kicker: 'Medical centre' });
+}
+
+function meditate(what) {
+  fade(() => {
+    const rest = what === 'rest';
+    state.minutes = (state.minutes + (rest ? 90 : 60)) % 1440;
+    state.energy = Math.min(100, state.energy + (rest ? 50 : 35));
+    toast(rest ? 'You doze for an hour and a half. Much better.' : "An hour of stillness. The city's noise fades, then your tiredness.", 'win', 5000);
+  }, 700);
+}
+
+const FORTUNES = {
+  lucky: 'The keeper turns a tile: a ship with full sails. "Your cargo flies true today." Deliveries pay 20% more until midnight.',
+  calm: 'The keeper turns a tile: a closed eye. "Today, the watchers do not see you." Patrol scans reach less far until midnight.',
+  swift: 'The keeper turns a tile: a bird. "Your feet are light today." You walk and run faster until midnight.',
+};
+function fortune() {
+  if (hasBuff('lucky') || hasBuff('calm') || hasBuff('swift')) { toast('"One fortune a day," says the keeper. "Come back tomorrow."', 'info'); return; }
+  if (state.credits < 25) { toast('The keeper asks 25 cr for incense. You do not have it.', 'bad'); return; }
+  addCredits(-25, 'Fortune at the shrine');
+  const id = ['lucky', 'calm', 'swift'][Math.floor(Math.random() * 3)];
+  state.buff = { id, day: state.day };
+  sfx('win');
+  toast(FORTUNES[id], 'race', 9000);
+}
+
+// The embassy's permits change how the city treats you.
+function openVisa() {
+  openPanel('Visa and permits', (body) => {
+    const up = trade.upgrades();
+    const item = (key, name, price, text) => h('div.menu-item', {},
+      h('div', {}, h('b', {}, name), up[key] ? h('span.tag', {}, 'yours') : '', h('div.muted', {}, text)),
+      up[key] ? h('span.muted', {}, 'Granted') : h('button.btn.primary', { onclick: () => {
+        if (state.credits < price) { toast('Not enough credits.', 'bad'); sfx('lose'); return; }
+        addCredits(-price, name);
+        up[key] = 1;
+        sfx('win');
+        toast(`${name} granted.`, 'win');
+        closePanel();
+      } }, `${price.toLocaleString()} cr`));
+    body.append(
+      h('p.muted', {}, 'Papers that open doors. Stamped while you wait.'),
+      item('diplomat', 'Diplomatic transponder', 2200, 'Embassy scanners ignore your speeder, and patrol scans reach a quarter less far.'),
+      item('license', 'Priority courier licence', 1500, 'Every delivery pays 15% more.'));
+  }, { kicker: 'Embassy' });
+}
+
+function pickFruit() {
+  if (state.fruitDay === state.day) { toast('You have picked today\'s fruit. The gardener smiles: tomorrow.', 'info'); return; }
+  if (trade.cargoCount() + 3 > trade.capacity()) { toast('Your cargo hold is too full for fruit.', 'bad'); return; }
+  trade.addItem('fruit', 3);
+  state.fruitDay = state.day;
+  sfx('coin');
+  toast('You pick three sky fruit and put them in your hold. Press I to eat one.', 'win');
+}
+
+function lookInMirror() {
+  const w = G.walker;
+  const T = THREE.Vector3;
+  const head = w.pos.clone().add(new T(0, 1.5, 0));
+  viewer = { until: elapsed + 6, name: 'mirror' };
+  G.rig.override = { pos: head.clone().add(new T(Math.sin(w.facing) * 2.6, 0.2, Math.cos(w.facing) * 2.6)), look: head, fov: 45, ease: 5 };
+  toast('Looking good. Move to stop.', 'info', 2500);
+}
+
+// A home: buy it, or sleep, save and admire the view.
+function openHome(id) {
+  const d = HOMES[id];
+  if (!ownsHome(id)) {
+    openPanel(d.name, (body) => {
+      body.append(h('p', {}, `${d.where}. ${d.perk}`),
+        h('p.muted', {}, 'Buying your first home ends your Skyhaven lease: no more rent.'),
+        h('div.row', {}, h('button.btn.primary', { onclick: () => { closePanel(); openRealty(realtyCtx); } }, `See it at Skyline Realty · ${d.price.toLocaleString()} cr`)));
+    }, { kicker: 'For sale' });
+    return;
+  }
+  openPanel(d.name, (body) => {
+    body.append(h('p.muted', {}, d.perk),
+      h('div.row.wrap', {},
+        h('button.btn.primary', { onclick: () => {
+          closePanel();
+          if (acts.sleepUntilMorning(ctx) && id === 'penthouse') setTimeout(() => { state.hunger = 100; }, 800);
+        } }, 'Sleep'),
+        h('button.btn', { onclick: () => { save(); toast('Game saved.', 'info'); } }, 'Save'),
+        h('button.btn', { onclick: () => { closePanel(); openBoutique(ctx, { title: 'Wardrobe', kicker: d.name }); } }, 'Wardrobe')));
+  }, { kicker: 'Your home' });
+}
+
 function doAction(it) {
   sfx('open');
   switch (it.action) {
@@ -453,6 +698,38 @@ function doAction(it) {
     }
     case 'lift-choose': openLiftPanel(); break;
     case 'viewer': startViewer(); break;
+    case 'enter': enterInterior(it.data); break;
+    case 'leave': exitInterior(); break;
+    case 'bar': acts.openFood('ale', ctx); break;
+    case 'feast': acts.openFood('feast', ctx); break;
+    case 'eatoff': openEatOff(ctx); break;
+    case 'dance': openDance(ctx, { fee: state.inside && state.inside.id === 'club' && wearing('party') ? 0 : 20, bonus: wearing('party') ? 1.35 : 1 }); break;
+    case 'arcade': openDodger(ctx); break;
+    case 'poker': openPoker(ctx, it.data && it.data.stakes === 'high'
+      ? { title: 'The high table', kicker: 'Noble salon · Holo Poker', bets: [100, 250, 500, 1000] }
+      : { title: 'Holo Poker', kicker: 'Jacks or better', bets: [5, 10, 25, 50] }); break;
+    case 'slicer': openSlicer(ctx, {
+      reward: police.wanted ? 'a wiped record' : '220 cr of paydata',
+      onWin: () => {
+        if (police.wanted) { clearHeat(); return 'You slice into Spire Security and wipe your file. The patrols lose interest.'; }
+        addCredits(220, 'Sliced paydata');
+        return 'Clean slice. You skim 220 cr of paydata before anyone notices.';
+      },
+    }); break;
+    case 'clinic': openClinic(); break;
+    case 'meditate': meditate(it.data && it.data.what); break;
+    case 'fortune': fortune(); break;
+    case 'visa': openVisa(); break;
+    case 'art': openArt(ctx, (it.data && it.data.kind) || 'art'); break;
+    case 'pickfruit': pickFruit(); break;
+    case 'boutique': openBoutique(ctx, { shopOnly: true }); break;
+    case 'wardrobe':
+      if (ownsHome(it.data.id)) openBoutique(ctx, { title: 'Wardrobe', kicker: HOMES[it.data.id].name });
+      else toast('Not your wardrobe. Not yet.', 'info');
+      break;
+    case 'mirror': lookInMirror(); break;
+    case 'realty': openRealty(realtyCtx); break;
+    case 'home': openHome(it.data.id); break;
     default: break;
   }
 }
@@ -647,7 +924,10 @@ function handleEvents(events) {
       toast(`Rent of 120 cr collected.${state.credits < 0 ? ' You are in the red. Find work fast.' : ''}`, state.credits < 0 ? 'bad' : 'info', 6000);
       sfx('alert');
     }
-    if (e.type === 'newday') toast(`Day ${state.day} begins.`, 'info');
+    if (e.type === 'newday') {
+      toast(`Day ${state.day} begins.`, 'info');
+      for (const [id, n] of Object.entries(DAILY)) if (ownsHome(id)) addCredits(n, id === 'crown' ? 'Monolith Crown sightseeing tours' : 'Floating Villa guests');
+    }
     if (e.type === 'loandue' && state.loan) {
       const owed = state.loan.owed;
       state.loan = null;
@@ -690,8 +970,11 @@ function fellOff() {
     // Nudge back from the edge we fell from.
     const z = zoneAt(G.walker.pos);
     if (!z) G.walker.place(68, LEVELS.promenade, 0, Math.PI / 2);
-    addCredits(-50, 'Fall-catch drone');
-    toast('A fall-catch drone snagged you a few hundred metres down. That will be 50 credits.', 'bad', 6000);
+    if (wearing('pilot') || wearing('glide')) toast('A fall-catch drone snagged you. Pilots ride free.', 'info', 5000);
+    else {
+      addCredits(-50, 'Fall-catch drone');
+      toast('A fall-catch drone snagged you a few hundred metres down. That will be 50 credits.', 'bad', 6000);
+    }
     G.falling = false;
   });
 }
@@ -707,7 +990,7 @@ function update(dt) {
 
   // Time and body.
   if (!paused) handleEvents(tick(dt));
-  w.speedMul = bodySpeedMul();
+  w.speedMul = bodySpeedMul() * (hasBuff('swift') ? 1.2 : 1);
   const elev = updateEnvironment(state.minutes, sun, hemi);
   void elev;
   if (Math.abs(ENV.uNight.value - envNight) > 0.2) refreshReflections();
@@ -715,9 +998,14 @@ function update(dt) {
   // Toggles.
   if (pressed('KeyH')) { helpOpen = !helpOpen; $('help').classList.toggle('hidden', !helpOpen); }
   if (pressed('KeyO')) openSettings();
-  if (pressed('KeyV')) callSpeeder();
+  if (pressed('KeyV')) { if (state.inside) toast('Step outside first: your speeder cannot come indoors.', 'info'); else callSpeeder(); }
   if (pressed('KeyJ')) story.openJournal(() => clearTarget());
   if (pressed('KeyI')) trade.openInventory(ctx);
+  // Honk. At a patrol, that is an invitation.
+  if (pressed('KeyG') && mode === 'fly') {
+    sfx('horn');
+    crime('taunt', { player: G.speeder.pos, flyers: G.flyers.flyers, flying: true, hooks: policeHooks });
+  }
 
   // Lift.
   const el = G.elevator;
@@ -781,7 +1069,8 @@ function update(dt) {
   if (mode === 'walk') s.update(dt, false);
   updateRecall(dt);
   s.bonus = (trade.upgrades().turbo || 0) * 12;
-  s.load = state.job && state.job.heavy ? 0.7 : 1;
+  s.load = state.job && state.job.heavy && !s.spec.hauler ? 0.7 : 1;
+  s.handling = wearing('pilot') ? 1.2 : 1;
   bumpCooldown -= dt;
 
   // The world around.
@@ -793,6 +1082,11 @@ function update(dt) {
   updatePolice(dt, { player: focus, flying: mode === 'fly', speed: s.speed, flyers: G.flyers.flyers, hooks: policeHooks });
   if (police.wanted && police.dist < 700 && (sirenT -= dt) <= 0) { sirenT = 1.1; sfx('siren'); }
   updatePassenger(dt);
+  // The hideout is off every map.
+  if (police.wanted && ownsHome('hideout') && focus.distanceTo(homePos('hideout').center) < 45) {
+    clearHeat();
+    toast('You slip into your hideout under the clouds. Spire Security loses the trail.', 'win', 6000);
+  }
   G.gaterun.update(dt, mode === 'fly' ? s.pos : null);
   updateEscape();
   if (mode === 'fly' && story.favorState('imani') === 'active') {
@@ -803,13 +1097,14 @@ function update(dt) {
   G.atmosphere.update(elapsed, camera);
   G.race.update(dt, elapsed, focus.length() < 1500);
   for (const o of G.district.spinners) o.rotation.y += o.userData.spin * dt;
+  for (const o of G.interiors.spinners) o.rotation.y += o.userData.spin * dt;
   if (G.district.rouletteWheel) {
     G.district.rouletteWheel.rotation.y += wheelSpin * dt;
     wheelSpin *= 1 - Math.min(1, dt * 0.6);
   }
 
   // Wayfinding.
-  const guide = guidance(focus, mode, s, mode === 'walk' && el.containsPlayer(w.pos));
+  const guide = state.inside ? null : guidance(focus, mode, s, mode === 'walk' && el.containsPlayer(w.pos));
   if (arrived(w.pos, mode)) {
     toast(`You've arrived: ${nav.target.name}.`, 'win', 3500);
     sfx('deliver');
@@ -889,7 +1184,7 @@ function onBump(impact) {
   sfx('bump');
   if (state.job && state.job.fragile) {
     // Hull plating halves the knocks fragile cargo takes.
-    state.job.damage += trade.upgrades().plating ? 0.5 : 1;
+    state.job.damage += (trade.upgrades().plating ? 0.5 : 1) * (G.speeder.spec.fragile ? 2 : 1);
     toast(`Fragile cargo took a hit (${state.job.damage}).`, 'bad', 2500);
   }
   const rider = passengerOf(state.job);
@@ -1017,7 +1312,7 @@ build().then((extra) => {
     step: (n, dt = 1 / 30) => { for (let i = 0; i < n; i++) { update(dt); endFrame(); } },
     doAction: (action, data) => doAction({ action, data }),
     nearest: () => nearestInteract(G.walker.pos),
-    nav, openMap, closeMap, story, trade, jobs, police, bump: (i) => { bumpCooldown = 0; onBump(i); },
+    nav, openMap, closeMap, story, trade, jobs, police, dress, homes: { buy: (id) => buyHomeFor(id) }, interiors: INTERIORS, games: { scoreHand, makeGrid }, wearing, crime: (k) => crime(k, { player: mode === 'fly' ? G.speeder.pos : G.walker.pos, flyers: G.flyers.flyers, flying: mode === 'fly', hooks: policeHooks }), clearHeat, bump: (i) => { bumpCooldown = 0; onBump(i); },
     guide: () => guidance(mode === 'fly' ? G.speeder.pos : G.walker.pos, mode, G.speeder, mode === 'walk' && G.elevator.containsPlayer(G.walker.pos)), setMode: (m) => (m === 'fly' ? boardSpeeder() : exitSpeeder()), begin, world, interactables, get mode() { return mode; }, get quality() { return QUALITY[qualityLevel].name; }, openSettings,
     setQuality: (name) => { settings.quality = name; applyQuality(Math.max(0, QUALITY.findIndex((q) => q.name === name))); }, totalMinutes };
 });

@@ -336,3 +336,31 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--cyan); }
 .tag.cat-curio { color: #c7a6ff; border-color: rgba(199, 166, 255, 0.4); }
 .tag.cat-parts { color: #ffb347; border-color: rgba(255, 179, 71, 0.4); }
 @media (max-width: 720px) { .trade-cols { grid-template-columns: 1fr; } }
+
+.btn .swatch { display: inline-block; width: 14px; height: 14px; margin-right: 6px; vertical-align: -2px; border-radius: 3px; }
+
+/* Minigames */
+.cards.poker { display: flex; gap: 10px; justify-content: center; margin: 12px 0; }
+.cards.poker .card { cursor: pointer; transition: transform 0.15s; }
+.card.held { transform: translateY(-10px); box-shadow: 0 0 0 3px var(--amber), 0 6px 12px rgba(0, 0, 0, 0.5); }
+.small { font-size: 12px; }
+.dance { position: relative; height: 300px; background: linear-gradient(#0c0614, #1c0a26); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; margin: 10px 0; }
+.dance-lane { position: absolute; top: 0; bottom: 0; width: 25%; border-right: 1px solid rgba(255, 122, 192, 0.15); }
+.dance-target { position: absolute; top: 80%; left: 50%; transform: translate(-50%, -50%); font-size: 30px; color: rgba(255, 255, 255, 0.35); border: 2px solid rgba(255, 122, 192, 0.5); border-radius: 50%; width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; }
+.dance-target.hit { animation: dancehit 0.2s; }
+@keyframes dancehit { 0% { background: rgba(255, 122, 192, 0.6); } 100% { background: transparent; } }
+.dance-line { position: absolute; top: 80%; left: 0; right: 0; height: 2px; background: var(--magenta); box-shadow: 0 0 10px var(--magenta); }
+.dance-note { position: absolute; width: 25%; text-align: center; font-size: 34px; font-weight: 700; color: var(--cyan); text-shadow: 0 0 12px var(--cyan); transform: translateY(-50%); transition: opacity 0.15s; }
+.dance-note.good { color: var(--green); }
+.dance-note.miss { color: var(--red); }
+.dance-score { position: absolute; top: 8px; right: 12px; font-family: var(--hud-font); font-weight: 700; color: var(--ink); }
+canvas.arcade { display: block; margin: 10px auto; border: 1px solid var(--line); border-radius: 6px; max-width: 100%; }
+.slice-target { display: flex; gap: 8px; margin: 8px 0; font-family: var(--hud-font); font-size: 20px; font-weight: 700; }
+.slice-target span { border: 1px solid var(--line); padding: 2px 10px; border-radius: 4px; color: var(--amber); }
+.slice-target span.done { color: var(--green); border-color: var(--green); }
+.slice-grid { display: grid; grid-template-columns: repeat(5, 54px); gap: 6px; margin: 8px 0; }
+.slice-cell { background: rgba(8, 14, 24, 0.8); border: 1px solid rgba(127, 234, 255, 0.2); color: var(--muted); font-family: var(--hud-font); font-size: 18px; font-weight: 700; padding: 8px 0; border-radius: 4px; cursor: pointer; }
+.slice-cell.live { color: var(--ink); border-color: var(--cyan); background: rgba(51, 221, 255, 0.12); }
+.slice-cell.used { color: var(--green); border-color: var(--green); opacity: 0.6; }
+.slice-timer { font-family: var(--hud-font); font-size: 22px; font-weight: 700; color: var(--amber); }
+.bar.rival i { background: linear-gradient(90deg, #c7a6ff, #7a5cff); }

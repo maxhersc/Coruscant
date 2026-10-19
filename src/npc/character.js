@@ -4,11 +4,13 @@ import { stdMat, glowMat } from '../world/env.js';
 // An articulated humanoid for the player: legs and arms swing with speed.
 // Options for named characters: hat ('cap' | 'hood' | 'band'), coat (a long
 // coat or robe), tails (head-tails), droid (metal finish, no hair, red eye
-// band), scale (overall size), hair colour.
-export function createHumanoid({ skin = 0xc68e6a, cloth = 0x2b3f5c, accent = 0xd9a441, pants = 0x2a2a30, hat = null, coat = false, tails = false, droid = false, scale = 1, hairColor = 0x2a1a12, visor = 0x66ddff } = {}) {
+// band), scale (overall size), hair colour. For the player's clothes: trim (a
+// glowing stripe colour), metal (plate armour), cape (its colour), pack ('jet'
+// or 'wings') and halo.
+export function createHumanoid({ skin = 0xc68e6a, cloth = 0x2b3f5c, accent = 0xd9a441, pants = 0x2a2a30, hat = null, coat = false, tails = false, droid = false, scale = 1, hairColor = 0x2a1a12, visor = 0x66ddff, trim = null, metal = false, cape = null, pack = null, halo = false } = {}) {
   const g = new THREE.Group();
   const skinM = droid ? stdMat(skin, { roughness: 0.25, metalness: 0.85 }) : stdMat(skin, { roughness: 0.8, metalness: 0 });
-  const clothM = droid ? stdMat(cloth, { roughness: 0.3, metalness: 0.8 }) : stdMat(cloth, { roughness: 0.85, metalness: 0.05 });
+  const clothM = droid || metal ? stdMat(cloth, { roughness: 0.3, metalness: 0.8 }) : stdMat(cloth, { roughness: 0.85, metalness: 0.05 });
   const pantsM = stdMat(pants, { roughness: 0.9, metalness: 0 });
   const accentM = stdMat(accent, { roughness: 0.4, metalness: 0.6 });
   const bootM = stdMat(0x1a1714, { roughness: 0.6 });
@@ -80,6 +82,68 @@ export function createHumanoid({ skin = 0xc68e6a, cloth = 0x2b3f5c, accent = 0xd
     hips.add(skirt);
   }
 
+  if (trim) {
+    const glow = glowMat(trim, 2.6);
+    for (const side of [-1, 1]) {
+      const strip = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.5, 0.02), glow);
+      strip.position.set(side * 0.1, 0.45, 0.17);
+      hips.add(strip);
+    }
+    const hem = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.012, 4, 20), glow);
+    hem.rotation.x = Math.PI / 2;
+    hem.position.y = 0.17;
+    hem.scale.z = 0.8;
+    hips.add(hem);
+  }
+  if (cape) {
+    const c = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.05, 0.03), stdMat(cape, { roughness: 0.8 }));
+    c.position.set(0, 0.2, -0.2);
+    c.rotation.x = 0.12;
+    hips.add(c);
+  }
+  // A jump pack with nozzles that flare when it fires; or folding glider wings.
+  let flames = null, wingL = null, wingR = null;
+  if (pack === 'jet') {
+    const metalM = stdMat(0x3a3d44, { roughness: 0.35, metalness: 0.8 });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.42, 0.16), metalM);
+    body.position.set(0, 0.5, -0.24);
+    hips.add(body);
+    flames = new THREE.Group();
+    for (const side of [-1, 1]) {
+      const noz = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 0.14, 8), metalM);
+      noz.position.set(side * 0.1, 0.24, -0.26);
+      hips.add(noz);
+      const fl = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.45, 8), glowMat(0xffaa44, 5));
+      fl.rotation.x = Math.PI;
+      fl.position.set(side * 0.1, -0.04, -0.26);
+      flames.add(fl);
+    }
+    flames.visible = false;
+    hips.add(flames);
+  } else if (pack === 'wings') {
+    const wingM = stdMat(0xd8dde4, { roughness: 0.4, metalness: 0.5, side: THREE.DoubleSide });
+    const edge = glowMat(0x66ddff, 2);
+    const wing = (side) => {
+      const pivot = new THREE.Group();
+      pivot.position.set(side * 0.08, 0.6, -0.22);
+      const panel = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.03, 0.34), wingM);
+      panel.position.x = side * 0.45;
+      const lip = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.035, 0.03), edge);
+      lip.position.set(side * 0.45, 0, 0.17);
+      pivot.add(panel, lip);
+      hips.add(pivot);
+      return pivot;
+    };
+    wingL = wing(-1);
+    wingR = wing(1);
+  }
+  if (halo) {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.018, 6, 28), glowMat(0xfff2b0, 4));
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = 0.45;
+    neck.add(ring);
+  }
+
   const limb = (r, len, mat) => {
     const pivot = new THREE.Group();
     const m = new THREE.Mesh(new THREE.CapsuleGeometry(r, len, 4, 8), mat);
@@ -107,7 +171,19 @@ export function createHumanoid({ skin = 0xc68e6a, cloth = 0x2b3f5c, accent = 0xd
   }
 
   let phase = 0;
+  let gliding = false;
+  // pose: { thrust, glide } from the walker's abilities.
+  const setPose = ({ thrust = false, glide = false } = {}) => {
+    if (flames) flames.visible = thrust;
+    gliding = glide;
+  };
   const animate = (speed, dt, airborne = false) => {
+    if (wingL) {
+      // Wings fold along the back, and spread out flat to glide.
+      const want = gliding ? 0 : 1.25;
+      wingL.rotation.z += (-want - wingL.rotation.z) * Math.min(1, dt * 8);
+      wingR.rotation.z += (want - wingR.rotation.z) * Math.min(1, dt * 8);
+    }
     const s = Math.min(speed / 4.5, 1.8);
     phase += dt * (3 + speed * 1.6);
     const swing = Math.sin(phase) * 0.7 * Math.min(s, 1.2);
@@ -128,5 +204,5 @@ export function createHumanoid({ skin = 0xc68e6a, cloth = 0x2b3f5c, accent = 0xd
   };
 
   g.scale.setScalar(scale);
-  return { group: g, animate };
+  return { group: g, animate, setPose };
 }

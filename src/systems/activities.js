@@ -1,6 +1,6 @@
 import { state, addCredits, totalMinutes } from './state.js';
 import { openPanel, closePanel, h } from '../ui/panel.js';
-import { SPEEDER_MODELS } from '../player/speeder.js';
+import { SPEEDER_MODELS, PAINTS } from '../player/speeder.js';
 import { makeOffers, acceptJob, deliver, abandonJob, GUILD, FIXER, minutesLeft, describe, passengerOf } from './jobs.js';
 import { placeOf } from './places.js';
 import { saveGame, clearSave } from './save.js';
@@ -14,6 +14,7 @@ const MENUS = {
   ale: { title: 'The Low Orbit', kicker: 'Bar', items: [['Low Orbit ale', 12, 8, 6], ['Cantina stew', 18, 55, 0], ['Glowing blue thing', 30, 4, 30]] },
   fruit: { title: 'Sky Fruit', kicker: 'Galleria Market', items: [['Sky fruit', 6, 18, 2], ['Fruit basket', 20, 55, 6]] },
   skewers: { title: 'Grill House', kicker: 'Galleria Market', items: [['Grilled skewers', 16, 45, 0], ['Mystery meat platter', 24, 75, -5]] },
+  feast: { title: 'The Feast Stall', kicker: 'Food court', items: [['Banquet platter', 30, 95, 10], ['Spiced noodle tower', 22, 70, 5], ['Sweet glow-buns', 9, 25, 8]] },
   snack: { title: 'Vending machine', kicker: 'Rooftop deck', items: [['Ration bar', 5, 20, 0], ['Caf can', 4, 0, 10]] },
 };
 
@@ -50,10 +51,11 @@ export function openDealer(ctx) {
       for (const [id, m] of Object.entries(SPEEDER_MODELS)) {
         const owned = state.owned.includes(id);
         const active = state.speeder === id;
+        const cargo = 30 + (m.cargo || 0);
         body.append(h('div.menu-item', {},
           h('div', {},
             h('b', {}, m.name), ' ',
-            h('span.muted', {}, `${Math.round(m.maxSpeed * 3.6)} km/h · boost ${Math.round(m.boost * 3.6)} km/h`),
+            h('span.muted', {}, `${Math.round(m.maxSpeed * 3.6)} km/h · boost ${Math.round(m.boost * 3.6)} · hold ${cargo}`),
             h('div.muted', {}, m.blurb)),
           active ? h('span.tag', {}, 'Flying this') :
             owned ? h('button.btn', { onclick: () => { state.speeder = id; ctx.setSpeederModel(id); ctx.sfx('click'); render(); } }, 'Switch') :
@@ -71,9 +73,32 @@ export function openDealer(ctx) {
               }, `${m.price.toLocaleString()} cr`)
         ));
       }
+      // Paint for the speeder you fly now.
+      const cur = SPEEDER_MODELS[state.speeder];
+      state.paint ??= {};
+      body.append(h('div.label', {}, `Paint the ${cur.name} · 150 cr`));
+      const row = h('div.row.wrap');
+      PAINTS.forEach(([name, hull, accent], i) => {
+        const on = (state.paint[state.speeder] ?? 0) === i;
+        const sw = (c) => `#${(c ?? 0x888888).toString(16).padStart(6, '0')}`;
+        row.append(h('button.btn' + (on ? '.primary' : ''), {
+          title: name,
+          onclick: () => {
+            if (on) return;
+            const price = i === 0 ? 0 : 150;
+            if (state.credits < price) { ctx.toast('Not enough credits for paint.', 'bad'); ctx.sfx('lose'); return; }
+            if (price) addCredits(-price, `Paint job · ${name}`);
+            state.paint[state.speeder] = i;
+            ctx.setSpeederModel(state.speeder);
+            ctx.sfx('coin');
+            render();
+          },
+        }, h('span.swatch', { style: `background:${hull === null ? sw(cur.color) : sw(hull)};box-shadow:inset -8px 0 0 ${accent === null ? sw(cur.accent) : sw(accent)}` }), name));
+      });
+      body.append(row);
     };
     render();
-  }, { kicker: 'Spire Promenade' });
+  }, { kicker: 'Spire Promenade', wide: true });
 }
 
 export function openLoan(ctx) {

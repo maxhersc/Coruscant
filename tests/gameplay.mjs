@@ -266,7 +266,7 @@ r = await ev(() => {
   g.openMap();
   return { places: document.querySelectorAll('#placelist .place').length };
 });
-await page.click('#placelist .place:has-text("Lucky Comet Casino")');
+await ev(() => [...document.querySelectorAll('#placelist .place')].find((e) => e.textContent.includes('Lucky Comet Casino')).click());
 r = await ev(() => {
   const g = window.__game;
   const target = g.nav.target && g.nav.target.name;
@@ -485,7 +485,7 @@ const patrolNear = async (secs) => ev((n) => {
   const cop = g.G.flyers.flyers.find((f) => f.kind === 'police' && !f.chase) || g.G.flyers.flyers.find((f) => f.kind === 'police');
   for (let i = 0; i < n; i++) {
     s.pos.set(-1020, 320, -1020); s.vel.set(0, 0, 0); s.speed = 0;
-    if (!g.police.wanted) cop.pos.set(-1000, 320, -1020);
+    if (!g.police.wanted) cop.pos.set(-1020, 320, -1000);
     g.step(1);
     if (document.querySelector('#panel h2')?.textContent === 'Spire Security') break;
   }
@@ -512,7 +512,7 @@ r = await ev(() => {
   const s = g.G.speeder;
   const cop = g.G.flyers.flyers.find((f) => f.kind === 'police');
   let wanted = false;
-  for (let i = 0; i < 300 && !g.police.wanted; i++) { s.pos.set(-1020, 320, -1020); s.vel.set(0, 0, 0); cop.pos.set(-990, 320, -1020); g.step(1); }
+  for (let i = 0; i < 300 && !g.police.wanted; i++) { s.pos.set(-1020, 320, -1020); s.vel.set(0, 0, 0); cop.pos.set(-1020, 320, -990); g.step(1); }
   wanted = g.police.wanted;
   // Dive under the clouds and hold there.
   for (let i = 0; i < 300 && g.police.wanted; i++) { s.pos.set(-1020, 80, -1020); s.vel.set(0, 0, 0); s.speed = 0; g.step(1); }
@@ -542,6 +542,171 @@ r = await ev(() => {
   return out;
 });
 check('Sable the fixer offers smuggling runs', r.title === 'Sable · Smuggling runs' && r.offers === 3, JSON.stringify(r));
+
+// 28. Spire Security comes when called: honk at a patrol, ram one, and the
+// chase grows the longer it runs.
+r = await ev(() => {
+  const g = window.__game;
+  g.state.job = null;
+  g.state.inventory = {};
+  g.police.cool = 0;
+  if (g.mode !== 'fly') g.setMode('fly');
+  const s = g.G.speeder;
+  const cop = g.G.flyers.flyers.find((f) => f.kind === 'police' && !f.chase);
+  s.pos.set(-1020, 320, -1020); s.vel.set(0, 0, 0); s.speed = 0;
+  cop.pos.set(-1020, 320, -960);
+  g.step(1);
+  const taunted = g.crime('taunt');
+  const one = { wanted: g.police.wanted, stars: g.police.stars, pursuers: g.police.pursuers.length };
+  g.police.chaseTime = 31;
+  s.pos.set(-1020, 320, -1020);
+  g.step(1);
+  const two = { stars: g.police.stars, pursuers: g.police.pursuers.length };
+  g.clearHeat();
+  // Ram a patrol.
+  const cop2 = g.G.flyers.flyers.find((f) => f.kind === 'police' && !f.chase);
+  g.police.cool = 0; g.police.ramCool = 0;
+  s.pos.set(-1020, 320, -1020); s.speed = 60; s.vel.set(0, 0, 0);
+  // The patrol moves a few metres a frame, so start it right on top of you.
+  const pos = s.pos.clone();
+  for (let i = 0; i < 2; i++) { s.pos.copy(pos); s.speed = 60; cop2.pos.copy(pos); g.step(1); }
+  const rammed = { wanted: g.police.wanted, stars: g.police.stars, reason: g.police.reason };
+  g.clearHeat();
+  return { taunted, one, two, rammed };
+});
+check('honking at a patrol starts a chase', r.taunted && r.one.wanted && r.one.stars === 1 && r.one.pursuers === 1, JSON.stringify(r.one));
+check('a long chase raises the wanted level and brings more patrols', r.two.stars === 2 && r.two.pursuers === 2, JSON.stringify(r.two));
+check('ramming a patrol makes you wanted at two stars', r.rammed.wanted && r.rammed.stars >= 2, JSON.stringify(r.rammed));
+
+// 29. Inside buildings: a deck's lift leads down into its venue and back out;
+// dress codes are enforced.
+r = await ev(() => {
+  const g = window.__game;
+  // Land on the East Pad first.
+  if (g.mode === 'fly') { g.G.speeder.pos.set(132, 301, 0); g.G.speeder.vel.set(0, 0, 0); g.G.speeder.speed = 0; g.step(1); g.setMode('walk'); }
+  const it = g.interactables.find((i) => i.action === 'enter' && i.data.interior === 'club');
+  g.G.walker.place(it.pos.x, it.pos.y, it.pos.z, 0);
+  g.state.credits = 5000;
+  g.state.wardrobe = undefined;
+  g.dress();
+  g.doAction('enter', it.data);
+  return it.data;
+});
+await page.waitForTimeout(1600);
+let inside = await ev(() => ({ inside: window.__game.state.inside && window.__game.state.inside.id, y: window.__game.G.walker.pos.y, credits: window.__game.state.credits, near: window.__game.nearest() && window.__game.nearest().action }));
+check('a deck lift takes you inside its venue (cover charge paid)', inside.inside === 'club' && inside.y < -700 && inside.credits === 4980, JSON.stringify(inside));
+await ev(() => window.__game.doAction('leave'));
+await page.waitForTimeout(1600);
+r = await ev((back) => ({ inside: window.__game.state.inside, pos: window.__game.G.walker.pos.toArray(), back }), r.back);
+check('leaving puts you back on the deck', !r.inside && Math.abs(r.pos[1] - r.back[1]) < 0.6 && Math.hypot(r.pos[0] - r.back[0], r.pos[2] - r.back[2]) < 1, JSON.stringify(r));
+r = await ev(() => {
+  const g = window.__game;
+  const it = g.interactables.find((i) => i.action === 'enter' && i.data.interior === 'noble');
+  g.doAction('enter', it.data);
+  return it.data.venue;
+});
+await page.waitForTimeout(1600);
+r = await ev(() => ({ inside: window.__game.state.inside }));
+check('the noble salon turns away a courier jacket', !r.inside, JSON.stringify(r));
+
+// 30. Clothes change how you play: runner suit, jump pack.
+r = await ev(() => {
+  const g = window.__game;
+  g.state.credits = 20000;
+  g.doAction('boutique');
+  const buy = (name) => { const row = [...document.querySelectorAll('#panel .menu-item')].find((m) => m.textContent.includes(name)); row.querySelector('button').click(); };
+  buy('Runner suit');
+  buy('Jump pack');
+  document.querySelector('#panel .close').click();
+  const w = g.G.walker;
+  const ab = { ...w.abilities };
+  // Jump and hold Space: the pack carries you higher than a plain jump.
+  w.place(60, 300, 20, 0);
+  g.step(5);
+  g.input.pressed.add('Space'); g.input.keys.add('Space');
+  let top = 0;
+  for (let i = 0; i < 60; i++) { g.step(1); top = Math.max(top, w.pos.y - 300); }
+  g.input.keys.delete('Space');
+  g.step(60);
+  return { ab, top, outfit: g.state.wardrobe.outfit, gear: g.state.wardrobe.gear, credits: g.state.credits };
+});
+check('the boutique sells clothes that change what you can do', r.ab.runner && r.ab.jet && r.outfit === 'runner' && r.gear === 'jetpack' && r.credits === 20000 - 420 - 2400, JSON.stringify(r));
+check('a jump pack lifts you far above a normal jump', r.top > 4, String(r.top.toFixed(2)));
+
+// 31. Homes: buy one, rent stops; the hideout shakes off a chase.
+r = await ev(() => {
+  const g = window.__game;
+  g.state.credits = 5000;
+  g.state.noRent = false;
+  const err = g.homes.buy('hideout');
+  const c0 = g.state.credits;
+  g.state.minutes = 5 * 60 + 59; g.state.rentDueDay = g.state.day;
+  g.step(30);
+  const rentTaken = c0 - g.state.credits;
+  // Wanted, then reach the hideout.
+  const hide = g.nav.places.find((p) => p.name === 'Undercity Hideout').pos;
+  if (g.mode !== 'fly') g.setMode('fly');
+  g.G.speeder.pos.set(-1020, 320, -1020);
+  const cop = g.G.flyers.flyers.find((f) => f.kind === 'police' && !f.chase);
+  cop.pos.set(-1020, 320, -990);
+  g.police.cool = 0;
+  g.crime('taunt');
+  const wanted = g.police.wanted;
+  g.G.speeder.pos.set(hide.x, hide.y + 6, hide.z);
+  g.G.speeder.vel.set(0, 0, 0);
+  g.step(2);
+  return { err, rentTaken, owns: g.state.homes, wanted, after: g.police.wanted };
+});
+check('buying a home ends the rent', !r.err && r.owns.includes('hideout') && r.rentTaken === 0, JSON.stringify(r));
+check('reaching your hideout loses the police', r.wanted && !r.after, JSON.stringify(r));
+
+// 32. More speeders, and what they carry.
+r = await ev(() => {
+  const g = window.__game;
+  const t = g.trade;
+  g.state.speeder = 'hauler';
+  const hauler = t.capacity();
+  g.state.speeder = 'skimmer';
+  const skimmer = t.capacity();
+  g.state.speeder = 'courier';
+  return { hauler, skimmer, courier: t.capacity() };
+});
+check('speeders carry different amounts of cargo', r.hauler === 90 && r.skimmer === 10 && r.courier === 30, JSON.stringify(r));
+
+// 33. Games: poker hands score right; slicer grids can always be solved.
+r = await ev(() => {
+  const g = window.__game;
+  const H = (s) => s.split(' ').map((c) => ({ r: c.slice(0, -1), s: c.slice(-1) }));
+  const hands = {
+    royal: g.games.scoreHand(H('10♠ J♠ Q♠ K♠ A♠')), full: g.games.scoreHand(H('3♠ 3♥ 3♦ 9♣ 9♠')),
+    wheel: g.games.scoreHand(H('A♠ 2♥ 3♦ 4♣ 5♠')), jacks: g.games.scoreHand(H('J♠ J♥ 3♦ 4♣ 9♠')),
+    low: g.games.scoreHand(H('5♠ 5♥ 3♦ 4♣ 9♠')),
+  };
+  let solvable = true;
+  for (let i = 0; i < 50; i++) {
+    const p = g.games.makeGrid();
+    p.path.forEach(([r2, c], k) => { if (p.grid[r2][c] !== p.target[k]) solvable = false; if (k === 0 && r2 !== 0) solvable = false; if (k > 0 && (k % 2 === 1 ? c !== p.path[k - 1][1] : r2 !== p.path[k - 1][0])) solvable = false; });
+  }
+  return { hands: Object.fromEntries(Object.entries(hands).map(([k, v]) => [k, v && v[0]])), solvable };
+});
+check('holo poker scores hands', r.hands.royal === 'Royal flush' && r.hands.full === 'Full house' && r.hands.wheel === 'Straight' && r.hands.jacks === 'Jacks or better' && !r.hands.low, JSON.stringify(r.hands));
+check('every slicer grid can be solved', r.solvable, '');
+r = await ev(() => {
+  const g = window.__game;
+  g.state.credits = 1000;
+  g.doAction('poker', { stakes: 'low' });
+  document.querySelector('#panel button.big').click();
+  const cards = document.querySelectorAll('#panel .cards.poker .card:not(.back)').length;
+  document.querySelector('#panel button.big').click();
+  const result = document.querySelector('#panel .result').textContent;
+  document.querySelector('#panel .close').click();
+  g.doAction('arcade');
+  const canvas = !!document.querySelector('#panel canvas.arcade');
+  document.querySelector('#panel .close').click();
+  return { cards, result, canvas };
+});
+check('a hand of holo poker deals, draws and pays out', r.cards === 5 && /win|house/i.test(r.result), JSON.stringify(r));
+check('the Skylane Dodger cabinet opens', r.canvas, '');
 
 // 28. Auto quality steps down when frames are slow (a software renderer is).
 // Its own page, without ?low, so it starts at high.

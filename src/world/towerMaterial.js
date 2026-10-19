@@ -8,7 +8,7 @@ import { ENV, SKY_GLSL } from './env.js';
 // Per instance:
 //   aSize  = segment size in metres (x, y, z)
 //   aStyle = (seed, lit fraction, tint 0..1, band style)
-// Band style: 0 none, 1 amber bands, 2 cyan bands, 3 magenta bands, 4 ledge (no windows, glowing edge)
+// Band style: 0 none, 1 amber bands, 2 cyan bands, 3 magenta bands, 4 ledge (no windows, glowing edge), 5 halo (glows all over)
 export function createTowerMaterial(isCylinder) {
   return new THREE.ShaderMaterial({
     uniforms: { ...ENV, uCyl: { value: isCylinder ? 1 : 0 } },
@@ -98,6 +98,9 @@ export function createTowerMaterial(isCylinder) {
           vec2 g = vWp.xz / 7.0;
           float spot = step(0.93, h21(floor(g) + seed * 91.0)) * step(length(fract(g) - 0.5), 0.12);
           col += vec3(1.0, 0.6, 0.3) * spot * (0.4 + night * 2.0);
+        } else if (band > 4.5) {
+          // Halo: a ring that glows all over, brighter at night.
+          col = bandColor(1.0 + mod(seed * 7.0, 3.0)) * (0.55 + 2.4 * night);
         } else if (band > 3.5) {
           // Ledge: dark trim with a glowing lip on the top edge.
           col = base * 0.4 * light;

@@ -176,6 +176,7 @@ export function sfx(kind) {
     case 'lift': tone(660, 0, 0.15, 'sine', 0.08); tone(990, 0.15, 0.25, 'sine', 0.08); break;
     case 'horn': tone(440, 0, 0.5, 'sawtooth', 0.06); tone(554, 0, 0.5, 'sawtooth', 0.05); tone(659, 0, 0.5, 'sawtooth', 0.05); break;
     case 'deliver': [784, 988, 1175].forEach((f, i) => tone(f, i * 0.08, 0.25, 'triangle', 0.1)); break;
+    case 'zap': tone(1600, 0, 0.12, 'sawtooth', 0.03); tone(400, 0.04, 0.15, 'square', 0.025); break;
     case 'siren': tone(760, 0, 0.5, 'sawtooth', 0.035); tone(1010, 0.55, 0.5, 'sawtooth', 0.035); break;
     case 'alert': tone(880, 0, 0.12, 'square', 0.06); tone(880, 0.2, 0.12, 'square', 0.06); break;
     default: break;

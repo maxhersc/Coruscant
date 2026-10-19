@@ -1,6 +1,7 @@
 import { state, addCredits } from './state.js';
 import { openPanel, h } from '../ui/panel.js';
 import { placeOf } from './places.js';
+import { SPEEDER_MODELS } from '../player/speeder.js';
 
 // Trade: an inventory (your cargo hold), a catalogue of goods, and shops that
 // both sell and buy. Each shop pays more for some kinds of goods than others,
@@ -135,7 +136,9 @@ export function upgrades() {
   return state.upgrades;
 }
 export function capacity() {
-  return 30 + (upgrades().cargo || 0) * 20;
+  // Cargo pods add 20 each; some speeders carry more than others.
+  const model = SPEEDER_MODELS[state.speeder];
+  return Math.max(10, 30 + (upgrades().cargo || 0) * 20 + ((model && model.cargo) || 0));
 }
 export function cargoCount() {
   return Object.values(inventory()).reduce((a, b) => a + b, 0);

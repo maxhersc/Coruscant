@@ -45,7 +45,10 @@ and glow if it drops below 40 fps, raising them again when there is headroom.
 
 - **About 13,000 towers** on a 45 × 45 block grid, plus a backdrop ring out to
   11 km. Every window is procedural: lit or dark, blinds, silhouettes,
-  lights that change through the night.
+  lights that change through the night. Not all of them are boxes: tapering
+  needles girdled by glowing halo rings, saucer towers (a wide disc and dome on
+  a thin stem), twin towers joined by skybridges, ziggurats, three-sided
+  blades, hexagonal and domed round towers.
 - **About 14,000 craft on the skylanes.** Their positions are computed on the
   GPU from lane and clock, so the whole fleet costs two draw calls. Air
   taxis land on pads, wait and take off again. Police patrol with light bars.
@@ -117,17 +120,50 @@ Arm it at the kiosk by the East Pad; the next gate glows amber. Under par pays
     exchanges. They pay three times the Guild rate.
   Early deliveries pay a bonus, late ones are docked, and fragile cargo loses
   value with every collision.
-- **Spire Security**: patrols scan anything that flies near them, and the
-  embassies scan the air around their decks. Carry contraband (a smuggling
-  job, or spice in your hold) and the scan meter fills; when it is full a
-  patrol gives chase. Boost away until you are far enough off for long enough,
-  or dive under the clouds, where patrols will not follow. If one stays on your
-  tail it pulls you over: submit to a search (fine, cargo seized), offer a
-  "processing fee" (it might work), or hit the boost and run, once. While you
-  carry contraband the map shows every patrol and its scanner's reach. A
-  scanner jammer from the black market halves that reach.
-- **Betting** (in-game credits only): roulette, twenty-one, slots and Chance
-  Cubes. Skyrace runs every few minutes: six pilots fly three laps of the
+- **Spire Security**, and how to get them after you. Patrols scan anything
+  that flies near them, and the embassies scan the air around their decks:
+  carry contraband (a smuggling job, or spice in your hold) and the scan meter
+  fills. Fill it, honk at a patrol (`G`), ram one, or boost past one flat out,
+  and you are wanted. The wanted level runs from one star to three: it rises the
+  longer a chase lasts, every star brings another patrol in, faster, and
+  pursuers ram you and fire stun bolts that knock your speed away. Lose them by
+  getting far enough away, by breaking their line of sight behind towers, or by
+  diving under the clouds, where they will not follow, and keeping it up for a
+  few seconds; escaping a long chase earns street cred in credits. If one stays
+  on your tail it pulls you over: submit (fine, contraband seized, and at three
+  stars a night in a cell), offer a "processing fee" (it might work), or hit
+  the boost and run, once. While you carry contraband the map shows every
+  patrol and its scanner's reach. A scanner jammer, a shadow cloak, the Ghost
+  Runner, a diplomatic transponder and a shrine fortune all shrink that reach;
+  your own hideout, or slicing your file at a data exchange, ends a chase.
+- **Inside buildings**: every rooftop deck has a lift down into the place
+  below it. Dance at the nightclubs (a rhythm game, with cover charge unless
+  you are dressed for it), get patched up or restyled at the clinics, feast or
+  take on Big Oro in an eating contest at the food courts, play the arcade
+  cabinet or slice security grids at the data exchanges, meditate or have your
+  fortune told at the shrines (a day-long bonus), play the high table at the
+  noble salons and buy permits at the embassies (both formal dress only), buy
+  art at the galleries, use the parts counter and paint shop at the shipyards,
+  and pick fruit at the sky farms. On the Galleria Market's south side are
+  three more: **Threads** (clothes), the **Neon Arcade** (Skylane Dodger,
+  Holo Poker, slicing, a dance machine) and **Skyline Realty** (homes).
+- **Clothes that change how you play**, from Threads: a neon street jacket
+  (clubs let you in free and you dance better), a runner suit (run 30% faster,
+  jump higher), a flight suit (sharper steering, free fall-catch), a tailored
+  suit or silk robe (formal: dress codes, bigger passenger tips, better
+  bribes), a shadow cloak (harder to scan), bounty plate (stun bolts and rams
+  hurt half as much); hats from a pilot cap to a floating crown of lights; and
+  on your back a cape, glider wings (hold `Space` while falling to glide off a
+  deck) or a jump pack (hold `Space` in the air to fly). The clinic changes
+  your skin tone and hair colour.
+- **Homes**: an Undercity Hideout (chases end when you reach it), a
+  Spire-view Penthouse with a hot tub, a Floating Villa on an anti-grav
+  platform 1.4 km up with a pool (guests pay 90 cr a day), and the Monolith
+  Crown on top of a monolith (tours pay 180 cr a day). Every home has a bed, a
+  wardrobe, a landing pad and walls for the art and glowing plants you buy.
+  Buying your first ends your Skyhaven rent.
+- **Betting** (in-game credits only): roulette, twenty-one, slots, Chance
+  Cubes and Holo Poker (jacks or better; the noble salons run a high table). Skyrace runs every few minutes: six pilots fly three laps of the
   streets around the Spire. Bet at the casino booth, then watch from the
   promenade or chase it in your speeder.
 - **Trade**: 40 kinds of goods in seven categories (food, tech, luxury, goods
@@ -140,8 +176,12 @@ Arm it at the kiosk by the East Pad; the next gate glows amber. Under par pays
   Your speeder carries 30 items; press `I` for your cargo hold to eat, use,
   install or drop things. Speeder parts install for more speed, more cargo
   space or a plated hull that protects fragile deliveries.
-- **Speeders**: start with the Mk-II Courier and save up for the Vexa Sport or
-  the Zenith Interceptor.
+- **Speeders**: start with the Mk-II Courier and work up: the Vexa Sport, the
+  Bulkhead Hauler (+60 cargo, heavy freight does not slow it), the Razor
+  Skimmer (a fast bike, hard on fragile cargo), the Zenith Interceptor, the
+  Aurelia Cruiser sky yacht (passengers tip half as much again), the Ghost
+  Runner (scanners reach half as far) and the Comet GT, the fastest thing in
+  the city. Paint any of them at the dealer.
 - **Loans**: Vool lends fast. Miss the due date and his collectors take what
   you owe and leave you bruised.
 - The game saves to your browser every minute and whenever you sleep.
@@ -164,13 +204,16 @@ src/
     undercity.js       the Undercity Shelf, below the clouds
     district.js        the Spire hub's four levels and the rooftop decks
     deckDecor.js       what stands on each kind of rooftop deck
+    interiors.js       deck lift entrances, shopfronts, and the rooms inside
+    homes.js           homes for sale, art and plants for their walls
     elevator.js        the glass lift
     props.js           prop builders (rails, rooms, stalls, signs, pads)
     ads.js, beacons.js, landmarks.js, batch.js
   npc/                 the crowd (instanced, with swinging limbs) and the player model
   player/              walking, speeder flight, camera
-  systems/             time, needs, money, jobs, places, police, shops, trade, saving
+  systems/             time, needs, money, jobs, places, police, wardrobe, shops, trade, saving
   casino/              table games, Skyrace and the Gate Run
+  games/               Holo Poker, the dance-off, Skylane Dodger, slicing, the eating contest
   story/               the storyline, named people and conversations
   ui/                  HUD, panels, map
   audio/               procedural sound
@@ -190,7 +233,11 @@ sleep, settings, wayfinding, the speeder valet, the whole storyline, a
 favour, the Gate Run, trading (buy, sell, cargo limit, using and installing
 items), the kinds of delivery (routes, heavy freight, passengers and their
 tips, smuggling), Spire Security (a scan, a stop, a search, losing a patrol
-under the clouds) and automatic quality.
+under the clouds, honking and ramming, rising wanted levels), going into
+buildings (cover charges, dress codes), clothes (the boutique, the runner
+suit, the jump pack), homes (rent ends, the hideout ends a chase), cargo by
+speeder, Holo Poker hands, slicer grids, the arcade cabinet, and automatic
+quality.
 
 ```sh
 npm run build && npm run preview     # terminal 1

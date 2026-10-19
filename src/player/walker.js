@@ -9,6 +9,7 @@ const RADIUS = 0.35, HEIGHT = 1.8, STEP = 0.45, GRAVITY = 26;
 // articulated model following.
 export class Walker {
   constructor(scene) {
+    this.scene = scene;
     this.pos = new THREE.Vector3();
     this.vel = new THREE.Vector3();
     this.facing = 0;
@@ -19,6 +20,21 @@ export class Walker {
     this.speedMul = 1;
     this.frozen = false;
     this._wish = new THREE.Vector3();
+    // What your clothes let you do: run faster, thrust with a jump pack, glide.
+    this.abilities = { runner: false, jet: false, glide: false };
+    this.fuel = 2.5;
+    this.thrusting = false;
+    this.gliding = false;
+  }
+
+  // Swap the model for one wearing different clothes.
+  setLook(look) {
+    const visible = this.model.group.visible;
+    this.scene.remove(this.model.group);
+    this.model = createHumanoid(look);
+    this.model.group.visible = visible;
+    this.scene.add(this.model.group);
+    this.syncModel(0);
   }
 
   place(x, y, z, facing = 0) {
@@ -46,7 +62,8 @@ export class Walker {
     const wish = this._wish.set(fwdX * fz + rightX * fx, 0, fwdZ * fz + rightZ * fx);
     const len = wish.length();
     const sprint = key('ShiftLeft') || key('ShiftRight');
-    const speed = (sprint ? 7.6 : 4.3) * this.speedMul;
+    const ab = this.abilities;
+    const speed = (sprint ? 7.6 : 4.3) * this.speedMul * (ab.runner ? 1.3 : 1);
     if (len > 0) wish.multiplyScalar(speed / len);
     const accel = this.onGround ? 14 : 3;
     const k = 1 - Math.exp(-accel * dt);
@@ -54,10 +71,25 @@ export class Walker {
     this.vel.z += (wish.z - this.vel.z) * k;
 
     if (this.onGround && !this.frozen && pressed('Space')) {
-      this.vel.y = 7.4;
+      this.vel.y = ab.runner ? 9.2 : 7.4;
       this.onGround = false;
     }
     this.vel.y -= GRAVITY * dt;
+    // In the air, holding Space: a jump pack thrusts, glider wings glide.
+    const hold = !this.frozen && !this.onGround && key('Space');
+    this.thrusting = ab.jet && hold && this.fuel > 0 && !pressed('Space');
+    if (this.thrusting) {
+      this.vel.y = Math.min(7, this.vel.y + 36 * dt);
+      this.fuel -= dt;
+    } else if (this.onGround) this.fuel = Math.min(2.5, this.fuel + dt * 1.2);
+    this.gliding = ab.glide && hold && this.vel.y < -1.5;
+    if (this.gliding) {
+      this.vel.y = Math.max(this.vel.y, -2.6);
+      const fx = Math.sin(this.facing) * 13, fz = Math.cos(this.facing) * 13;
+      this.vel.x += (fx - this.vel.x) * Math.min(1, dt * 1.5);
+      this.vel.z += (fz - this.vel.z) * Math.min(1, dt * 1.5);
+    }
+    this.model.setPose?.({ thrust: this.thrusting, glide: this.gliding });
     if (this.vel.y < -60) this.vel.y = -60;
 
     // Integrate in two halves so fast falls do not skip thin floors.

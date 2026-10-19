@@ -1,8 +1,11 @@
 import * as THREE from 'three';
 import { TIME_SCALE } from '../config.js';
 import { decks } from './interact.js';
-import { state, totalMinutes, addCredits } from './state.js';
+import { state, totalMinutes, addCredits, hasBuff } from './state.js';
+import * as trade from './trade.js';
 import { placeOf } from './places.js';
+import { wearing } from './wardrobe.js';
+import { SPEEDER_MODELS } from '../player/speeder.js';
 
 // Courier work. Every contract carries cargo that suits where it is going (a
 // donor organ to a clinic, kegs to a nightclub), and comes in one of several
@@ -241,12 +244,17 @@ export function deliver() {
   let thanks;
   const rider = passengerOf(j);
   if (rider) {
-    const tip = left >= 0 ? Math.round(pay * 0.5 * Math.max(0, 1 - j.bumps * 0.25)) : 0;
+    // Formal wear and a sky yacht both charm a rider.
+    const charm = (wearing('formal') ? 1.25 : 1) * ((SPEEDER_MODELS[state.speeder] || {}).tips || 1);
+    const tip = left >= 0 ? Math.round(pay * 0.5 * charm * Math.max(0, 1 - j.bumps * 0.25)) : 0;
     if (tip > 0) { pay += tip; notes.push(`Tip: ${tip} cr.`); }
     thanks = j.bumps === 0 && left >= 0 ? rider.happy : left < 0 ? 'Late. I will be walking next time.' : 'Well, I am alive. That counts for something.';
   } else if (j.dest === GUILD.name) thanks = 'The Guild clerk stamps the manifest.';
   else if (j.contraband) thanks = pick(['Nobody looks at you. Nobody takes the crate. And then it is gone, and the credits are there.', '"You were never here." The credits are, though.', 'A hand from a doorway, a nod, and a credit chit that smells of spice.']);
   else thanks = pick(placeOf(j.dest).thanks);
+  // A priority licence and a lucky fortune both add to the fee.
+  const extra = (trade.upgrades().license ? 0.15 : 0) + (hasBuff('lucky') ? 0.2 : 0);
+  if (extra) { pay = Math.round(pay * (1 + extra)); notes.push(`+${Math.round(extra * 100)}% (${[trade.upgrades().license && 'licence', hasBuff('lucky') && 'fortune'].filter(Boolean).join(', ')}).`); }
   addCredits(pay, `Delivery · ${stop.cargo}`);
   state.stats.earned += pay;
   j.earned += pay;

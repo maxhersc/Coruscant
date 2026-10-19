@@ -35,6 +35,11 @@ export function addCredits(n, reason) {
   hooks.money(n, reason);
 }
 
+// A shrine fortune lasts until midnight of the day it was told.
+export function hasBuff(id) {
+  return !!state.buff && state.buff.id === id && state.buff.day === state.day;
+}
+
 export function canAfford(n) {
   return state.credits >= n;
 }
@@ -54,8 +59,11 @@ export function tick(dt) {
 
   if (state.day >= state.rentDueDay && state.minutes >= 6 * 60) {
     state.rentDueDay = state.day + 1;
-    addCredits(-RENT, 'Rent · Skyhaven Residences');
-    events.push({ type: 'rent' });
+    // Owning a home ends the Skyhaven lease.
+    if (!state.noRent) {
+      addCredits(-RENT, 'Rent · Skyhaven Residences');
+      events.push({ type: 'rent' });
+    }
   }
   if (state.loan && state.day >= state.loan.dueDay && state.minutes >= 12 * 60) {
     events.push({ type: 'loandue' });

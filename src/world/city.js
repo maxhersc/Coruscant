@@ -16,9 +16,12 @@ const DECK_NAMES = [
 
 export function generateCity(collision, reservedFn) {
   const rng = makeRng(42);
+  // Variety (which unusual shape, domes, hexes) draws on its own stream.
+  const vrng = makeRng(4343);
   const segs = [];
   const decks = [];
   const beacons = [];
+  const monoliths = [];
 
   const style = (core, opts = {}) => [
     rng.next(),
@@ -73,17 +76,109 @@ export function generateCity(collision, reservedFn) {
   const roundTower = (x, z, dia, H, core) => {
     const st = style(core);
     const n = rng.int(1, 3);
+    // Some round towers are six-sided, and some wear a dome instead of a spire.
+    const kind = vrng.chance(0.35) ? 'hex' : 'cyl';
+    const domed = vrng.chance(0.4);
     let y = 0, cdia = dia;
     for (let s = 0; s < n; s++) {
       const top = s === n - 1 ? H : y + (H - y) * rng.range(0.45, 0.7);
-      addSeg('cyl', x, y, z, cdia, top - y, cdia, st, false);
+      addSeg(kind, x, y, z, cdia, top - y, cdia, st, false);
       collision.addBox(x - cdia * 0.45, y, z - cdia * 0.45, x + cdia * 0.45, top, z + cdia * 0.45, 'tower');
       addSeg('cyl', x, top - 3, z, cdia * 1.06 + 1, 3, cdia * 1.06 + 1, [st[0], 0, 0.6, 4], false);
       y = top;
       cdia *= rng.range(0.6, 0.82);
     }
-    addSeg('cone', x, y, z, cdia * 0.6, rng.range(20, 90), cdia * 0.6, [st[0], 0, 0.6, 4], false);
-    beacons.push([x, y + 60, z]);
+    if (domed) {
+      addSeg('dome', x, y, z, cdia * 0.95, cdia * 0.42, cdia * 0.95, [st[0], 0, st[2], 0], false);
+      collision.addBox(x - cdia * 0.3, y, z - cdia * 0.3, x + cdia * 0.3, y + cdia * 0.35, z + cdia * 0.3, 'tower');
+      addSeg('cone', x, y + cdia * 0.4, z, 3, 26, 3, [st[0], 0, 0.6, 4], false);
+      beacons.push([x, y + cdia * 0.4 + 26, z]);
+    } else {
+      addSeg('cone', x, y, z, cdia * 0.6, rng.range(20, 90), cdia * 0.6, [st[0], 0, 0.6, 4], false);
+      beacons.push([x, y + 60, z]);
+    }
+  };
+
+  // ------------------------------------------------ unusual towers
+  // A ledge glows along its top lip; a halo is a glowing ring round a tower.
+  const ledge = (st) => [st[0], 0, 0.6, 4];
+  const halo = (st) => [st[0], 0, 0.6, 5];
+
+  // A tapering eight-sided needle girdled by glowing halo rings.
+  const needle = (x, z, dia, H, core) => {
+    const st = style(core);
+    addSeg('taper', x, 0, z, dia, H, dia, st, false);
+    collision.addBox(x - dia * 0.45, 0, z - dia * 0.45, x + dia * 0.45, H * 0.5, z + dia * 0.45, 'tower');
+    collision.addBox(x - dia * 0.36, H * 0.5, z - dia * 0.36, x + dia * 0.36, H, z + dia * 0.36, 'tower');
+    for (const f of vrng.chance(0.5) ? [0.62] : [0.42, 0.72]) {
+      const r = dia * (1 - f * 0.36);
+      addSeg('ring', x, H * f - 3, z, r * 1.6, 6, r * 1.6, halo(st), false);
+    }
+    const sh = vrng.range(40, 120);
+    addSeg('cone', x, H, z, dia * 0.3, sh, dia * 0.3, ledge(st), false);
+    beacons.push([x, H + sh, z]);
+  };
+
+  // A thin stem holding up a wide disc with a dome on top.
+  const saucer = (x, z, H, core) => {
+    const st = style(core, { lit: 0.4 });
+    const stem = vrng.range(14, 22), disc = vrng.range(56, 76), dh = vrng.range(10, 16);
+    addSeg('cyl', x, 0, z, stem, H, stem, st, false);
+    collision.addBox(x - stem * 0.45, 0, z - stem * 0.45, x + stem * 0.45, H, z + stem * 0.45, 'tower');
+    addSeg('cyl', x, H, z, disc, dh, disc, st, false);
+    addSeg('cyl', x, H - 2, z, disc * 0.8, 2, disc * 0.8, ledge(st), false);
+    addSeg('ring', x, H + dh - 2, z, disc * 1.04, 4, disc * 1.04, halo(st), false);
+    collision.addBox(x - disc * 0.42, H, z - disc * 0.42, x + disc * 0.42, H + dh, z + disc * 0.42, 'tower');
+    addSeg('dome', x, H + dh, z, disc * 0.6, disc * 0.22, disc * 0.6, [st[0], 0, st[2], 0], false);
+    collision.addBox(x - disc * 0.2, H + dh, z - disc * 0.2, x + disc * 0.2, H + dh + disc * 0.2, z + disc * 0.2, 'tower');
+    beacons.push([x, H + dh + disc * 0.22, z], [x + disc / 2, H + dh, z], [x - disc / 2, H + dh, z]);
+  };
+
+  // Two slim towers joined by glowing skybridges.
+  const twin = (x, z, core) => {
+    const stA = style(core), stB = style(core);
+    const w = vrng.range(20, 28), d = vrng.range(30, 44), gap = vrng.range(18, 30);
+    const H1 = vrng.range(200, 260 + core * 600), H2 = H1 * vrng.range(0.75, 1.1);
+    const xa = x - (gap + w) / 2, xb = x + (gap + w) / 2;
+    addSeg('box', xa, 0, z, w, H1, d, stA);
+    addSeg('box', xb, 0, z, w, H2, d, stB);
+    const low = Math.min(H1, H2);
+    const k = vrng.int(2, 3);
+    for (let i = 0; i < k; i++) {
+      const by = low * (0.35 + i * 0.22);
+      addSeg('box', x, by, z, gap + 2, 6, 9, [stA[0], 0.75, stA[2], 0]);
+      addSeg('box', x, by - 1.2, z, gap + 2, 1.2, 10, halo(stA), false);
+    }
+    for (const [tx, h] of [[xa, H1], [xb, H2]]) addSeg('pyr', tx, h, z, w, vrng.range(14, 30), d, ledge(stA), false);
+    beacons.push([xa, H1 + 20, z], [xb, H2 + 20, z]);
+  };
+
+  // A stepped pyramid of many tiers with a pointed cap.
+  const ziggurat = (x, z, w, H, core) => {
+    const st = style(core, { band: 0 });
+    const n = vrng.int(5, 7);
+    let y = 0, cw = w;
+    for (let i = 0; i < n; i++) {
+      const h = (H / n) * (1 - i * 0.04);
+      addSeg('box', x, y, z, cw, h, cw, st);
+      addSeg('box', x, y + h - 2, z, cw * 1.03 + 0.6, 2, cw * 1.03 + 0.6, ledge(st), false);
+      y += h;
+      cw *= 0.82;
+    }
+    addSeg('pyr', x, y, z, cw, cw * 0.9, cw, ledge(st), false);
+    collision.addBox(x - cw * 0.3, y, z - cw * 0.3, x + cw * 0.3, y + cw * 0.5, z + cw * 0.3, 'tower');
+    beacons.push([x, y + cw * 0.9, z]);
+  };
+
+  // A three-sided blade of a tower.
+  const wedge = (x, z, dia, H, core) => {
+    const st = style(core);
+    addSeg('wedge', x, 0, z, dia, H, dia, st, false);
+    collision.addBox(x - dia * 0.3, 0, z - dia * 0.3, x + dia * 0.3, H, z + dia * 0.3, 'tower');
+    collision.addBox(x - dia * 0.1, 0, z + dia * 0.1, x + dia * 0.1, H, z + dia * 0.45, 'tower');
+    addSeg('ring', x, H * 0.55, z, dia * 1.1, 5, dia * 1.1, halo(st), false);
+    addSeg('cone', x, H, z, dia * 0.25, vrng.range(40, 90), dia * 0.25, ledge(st), false);
+    beacons.push([x, H + 60, z]);
   };
 
   // Monolith landmarks: very tall, visible from anywhere.
@@ -118,7 +213,10 @@ export function generateCity(collision, reservedFn) {
       const key = `${i},${j}`;
 
       if (monolithSet.has(key)) {
-        steppedTower(cx, cz, 76, 76, rng.range(1500, 2300), 1, { segments: 3, band: rng.int(1, 3) });
+        // The first monolith keeps a flat top: someone lives up there.
+        const home = monoliths.length === 0;
+        const t = steppedTower(cx, cz, 76, 76, rng.range(1500, 2300), 1, { segments: 3, band: rng.int(1, 3), flatTop: home });
+        monoliths.push({ x: cx, z: cz, top: t.top, w: t.w, d: t.d });
         continue;
       }
       if (deckCells.has(key)) {
@@ -135,6 +233,15 @@ export function generateCity(collision, reservedFn) {
         // Low block: a gap in the skyline you can drop into.
         const w = rng.range(50, 88), d = rng.range(50, 88);
         steppedTower(cx, cz, w, d, rng.range(40, 110), 0, { segments: 1 });
+      } else if (r < 0.6 && vrng.chance(0.4) && dist > 260) {
+        // One of the unusual shapes, so the skyline is not all boxes.
+        const H = 140 + hMax * Math.pow(vrng.next(), 1.2);
+        const pick = vrng.int(0, 4);
+        if (pick === 0) needle(cx, cz, vrng.range(40, 64), H * 1.2, core);
+        else if (pick === 1) saucer(cx, cz, Math.max(120, H * 0.8), core);
+        else if (pick === 2) twin(cx, cz, core);
+        else if (pick === 3) ziggurat(cx, cz, vrng.range(70, 86), H * 0.75, core);
+        else wedge(cx, cz, vrng.range(56, 80), H, core);
       } else if (r < 0.6) {
         const w = rng.range(46, 88), d = rng.range(46, 88);
         const jx = rng.range(-1, 1) * (44 - w / 2), jz = rng.range(-1, 1) * (44 - d / 2);
@@ -174,7 +281,7 @@ export function generateCity(collision, reservedFn) {
     }
   }
 
-  return { segs, far, decks, beacons };
+  return { segs, far, decks, beacons, monoliths };
 }
 
 export function buildCityMeshes(segs) {
@@ -183,8 +290,17 @@ export function buildCityMeshes(segs) {
     box: new THREE.BoxGeometry(1, 1, 1),
     cyl: new THREE.CylinderGeometry(0.5, 0.5, 1, 20, 1),
     cone: new THREE.ConeGeometry(0.5, 1, 10, 1),
+    taper: new THREE.CylinderGeometry(0.32, 0.5, 1, 8, 1),
+    hex: new THREE.CylinderGeometry(0.5, 0.5, 1, 6, 1),
+    wedge: new THREE.CylinderGeometry(0.5, 0.5, 1, 3, 1),
+    // Half a sphere stretched to fill the unit box, flat side down.
+    dome: new THREE.SphereGeometry(0.5, 24, 10, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 2, 1).translate(0, -0.5, 0),
+    // A flat ring filling the unit box.
+    ring: new THREE.TorusGeometry(0.44, 0.06, 6, 48).rotateX(Math.PI / 2).scale(1, 1 / 0.12, 1),
+    pyr: new THREE.ConeGeometry(Math.SQRT1_2, 1, 4, 1).rotateY(Math.PI / 4),
   };
-  const mats = { box: createTowerMaterial(false), cyl: createTowerMaterial(true), cone: createTowerMaterial(true) };
+  const round = createTowerMaterial(true);
+  const mats = { box: createTowerMaterial(false), cyl: round, cone: round, taper: round, hex: round, wedge: round, dome: round, ring: round, pyr: round };
   const m = new THREE.Matrix4();
   const q = new THREE.Quaternion();
   const p = new THREE.Vector3();

@@ -456,6 +456,7 @@ export function buildDistrict(segs, cityDecks, beacons) {
 
   // Four towers framing the hub.
   const rng = makeRng(31);
+  const frames = [];
   for (const [sx, sz] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) {
     const st = [rng.next(), 0.55, rng.next(), rng.int(1, 3)];
     const x = sx * 145, z = sz * 145;
@@ -464,6 +465,7 @@ export function buildDistrict(segs, cityDecks, beacons) {
     addT(x, H * 0.6 - 2.5, z, 44, 2.5, 44, [st[0], 0, 0.6, 4], false);
     addT(x, H * 0.6, z, 32, H * 0.4, 32, st);
     beacons.push([x, H, z]);
+    frames.push({ x, z, H });
   }
 
   promenade(g);
@@ -498,5 +500,5 @@ export function buildDistrict(segs, cityDecks, beacons) {
   let rouletteWheel = null;
   g.traverse((o) => { if (o.userData.isWheel) rouletteWheel = o; });
 
-  return { group: g, elevator, spinners, raceBoard, rouletteWheel };
+  return { group: g, elevator, spinners, raceBoard, rouletteWheel, frames };
 }
