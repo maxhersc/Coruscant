@@ -9,11 +9,11 @@ import { stdMat, glowMat } from '../world/env.js';
 // or 'wings') and halo.
 export function createHumanoid({ skin = 0xc68e6a, cloth = 0x2b3f5c, accent = 0xd9a441, pants = 0x2a2a30, hat = null, coat = false, tails = false, droid = false, scale = 1, hairColor = 0x2a1a12, visor = 0x66ddff, trim = null, metal = false, cape = null, pack = null, halo = false } = {}) {
   const g = new THREE.Group();
-  const skinM = droid ? stdMat(skin, { roughness: 0.25, metalness: 0.85 }) : stdMat(skin, { roughness: 0.8, metalness: 0 });
-  const clothM = droid || metal ? stdMat(cloth, { roughness: 0.3, metalness: 0.8 }) : stdMat(cloth, { roughness: 0.85, metalness: 0.05 });
-  const pantsM = stdMat(pants, { roughness: 0.9, metalness: 0 });
-  const accentM = stdMat(accent, { roughness: 0.4, metalness: 0.6 });
-  const bootM = stdMat(0x1a1714, { roughness: 0.6 });
+  const skinM = droid ? stdMat(skin, { roughness: 0.25, metalness: 0.85, detail: 0 }) : stdMat(skin, { roughness: 0.8, metalness: 0, detail: 0 });
+  const clothM = droid || metal ? stdMat(cloth, { roughness: 0.3, metalness: 0.8, detail: 0 }) : stdMat(cloth, { roughness: 0.85, metalness: 0.05, detail: 0 });
+  const pantsM = stdMat(pants, { roughness: 0.9, metalness: 0, detail: 0 });
+  const accentM = stdMat(accent, { roughness: 0.4, metalness: 0.6, detail: 0 });
+  const bootM = stdMat(0x1a1714, { roughness: 0.6, detail: 0 });
 
   const hips = new THREE.Group();
   hips.position.y = 0.95;
@@ -39,7 +39,7 @@ export function createHumanoid({ skin = 0xc68e6a, cloth = 0x2b3f5c, accent = 0xd
   head.position.y = 0.14;
   head.scale.set(0.92, 1.08, 1);
   neck.add(head);
-  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.142, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.55), stdMat(hairColor, { roughness: 0.9 }));
+  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.142, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.55), stdMat(hairColor, { roughness: 0.9, detail: 0 }));
   hair.visible = !droid && !tails && hat !== 'hood';
   hair.position.y = 0.16;
   hair.rotation.x = -0.25;
@@ -50,7 +50,7 @@ export function createHumanoid({ skin = 0xc68e6a, cloth = 0x2b3f5c, accent = 0xd
   visorM.visible = droid || visor !== 0x66ddff;
 
   // Accessories.
-  const accM = stdMat(accent, { roughness: 0.5, metalness: 0.3 });
+  const accM = stdMat(accent, { roughness: 0.5, metalness: 0.3, detail: 0 });
   if (hat === 'cap') {
     const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.09, 14), clothM);
     crown.position.y = 0.27;
@@ -77,7 +77,7 @@ export function createHumanoid({ skin = 0xc68e6a, cloth = 0x2b3f5c, accent = 0xd
     }
   }
   if (coat) {
-    const skirt = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.36, 0.85, 14, 1, true), stdMat(cloth, { roughness: 0.85, metalness: 0.05, side: THREE.DoubleSide }));
+    const skirt = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.36, 0.85, 14, 1, true), stdMat(cloth, { roughness: 0.85, metalness: 0.05, side: THREE.DoubleSide, detail: 0 }));
     skirt.position.y = -0.3;
     hips.add(skirt);
   }
@@ -96,7 +96,7 @@ export function createHumanoid({ skin = 0xc68e6a, cloth = 0x2b3f5c, accent = 0xd
     hips.add(hem);
   }
   if (cape) {
-    const c = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.05, 0.03), stdMat(cape, { roughness: 0.8 }));
+    const c = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.05, 0.03), stdMat(cape, { roughness: 0.8, detail: 0 }));
     c.position.set(0, 0.2, -0.2);
     c.rotation.x = 0.12;
     hips.add(c);
@@ -104,7 +104,7 @@ export function createHumanoid({ skin = 0xc68e6a, cloth = 0x2b3f5c, accent = 0xd
   // A jump pack with nozzles that flare when it fires; or folding glider wings.
   let flames = null, wingL = null, wingR = null;
   if (pack === 'jet') {
-    const metalM = stdMat(0x3a3d44, { roughness: 0.35, metalness: 0.8 });
+    const metalM = stdMat(0x3a3d44, { roughness: 0.35, metalness: 0.8, detail: 0 });
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.42, 0.16), metalM);
     body.position.set(0, 0.5, -0.24);
     hips.add(body);
@@ -121,7 +121,7 @@ export function createHumanoid({ skin = 0xc68e6a, cloth = 0x2b3f5c, accent = 0xd
     flames.visible = false;
     hips.add(flames);
   } else if (pack === 'wings') {
-    const wingM = stdMat(0xd8dde4, { roughness: 0.4, metalness: 0.5, side: THREE.DoubleSide });
+    const wingM = stdMat(0xd8dde4, { roughness: 0.4, metalness: 0.5, side: THREE.DoubleSide, detail: 0 });
     const edge = glowMat(0x66ddff, 2);
     const wing = (side) => {
       const pivot = new THREE.Group();

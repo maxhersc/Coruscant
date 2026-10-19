@@ -6,18 +6,18 @@ import { patchFog } from './env.js';
 // Giant holo-billboards on tower faces around the hub. Each cycles between two
 // panels so the skyline keeps moving.
 const ADS = [
-  ['NOVA-COLA\nTaste the Core', '#ff4d6d', '#2a0010'],
-  ['HYPERLANE TRAVEL\n3 systems · 1 ticket', '#7feaff', '#001a2a'],
-  ['SKYRACE TONIGHT\nLucky Comet Casino', '#ffd166', '#2a1a00'],
+  ['NOVA-COLA\nTaste the Core', '#e88070', '#2a0010'],
+  ['HYPERLANE TRAVEL\n3 systems · 1 ticket', '#bcd8ec', '#001a2a'],
+  ['SKYRACE TONIGHT\nLucky Comet Casino', '#f0cc80', '#2a1a00'],
   ['ARKANIS DROIDWORKS\nBuilt to serve', '#c0c8d0', '#101418'],
-  ['CHROMA SILK', '#ff7ac0', '#22001a'],
-  ['STARGAZER CRUISES\nSee the rings of Talos', '#9effc4', '#00200f'],
-  ['FLUX CELLS\nPower for the long haul', '#ffb347', '#201000'],
-  ['HOLONET 24\nNews from every sector', '#7fa8ff', '#000a24'],
-  ['JUMP STATION\nNew Vexa Sport', '#7feaff', '#00151f'],
+  ['CHROMA SILK', '#e8a0b8', '#22001a'],
+  ['STARGAZER CRUISES\nSee the rings of Talos', '#bfe6cc', '#00200f'],
+  ['FLUX CELLS\nPower for the long haul', '#f0b070', '#201000'],
+  ['HOLONET 24\nNews from every sector', '#a8c0e8', '#000a24'],
+  ['JUMP STATION\nNew Vexa Sport', '#bcd8ec', '#00151f'],
   ['SKYHAVEN\nLive above the clouds', '#fff2dd', '#1a1410'],
-  ['ORBITAL NOODLES\nOpen all cycle', '#ffc266', '#1f0f00'],
-  ['COURIER GUILD\nNow hiring pilots', '#8dffad', '#001a08'],
+  ['ORBITAL NOODLES\nOpen all cycle', '#f0c27a', '#1f0f00'],
+  ['COURIER GUILD\nNow hiring pilots', '#bfe6c4', '#001a08'],
 ];
 
 export function createAds(segs) {
@@ -52,9 +52,9 @@ export function createAds(segs) {
     const set = portrait ? textures : wide;
     const mat = patchFog(new THREE.MeshBasicMaterial({
       map: set[a],
-      color: new THREE.Color(1, 1, 1).multiplyScalar(1.6),
+      color: new THREE.Color(1, 1, 1).multiplyScalar(0.9),
       transparent: true,
-      opacity: 0.92,
+      opacity: 0.85,
       depthWrite: false,
       side: THREE.DoubleSide,
     }));
@@ -73,19 +73,19 @@ export function createAds(segs) {
       }
       // A brief glitch as the panel changes.
       const phase = ((t + p.offset) % p.period) / p.period;
-      p.mesh.material.opacity = phase < 0.03 ? 0.4 + 0.5 * Math.random() : 0.92;
+      p.mesh.material.opacity = phase < 0.03 ? 0.4 + 0.4 * Math.random() : 0.85;
     }
   };
   addBanners(group, segs, rng);
   return { group, update };
 }
 
-// Vertical neon banners hung on tower faces near the hub. One instanced mesh
+// Vertical lit banners hung on tower faces near the hub. One instanced mesh
 // per design, so a hundred and fifty banners cost a handful of draw calls.
 const BANNERS = [
-  ['NOODLES', '#ffc266'], ['HOTEL', '#7feaff'], ['CAF', '#ff7ac0'], ['DROIDS', '#8dffad'],
-  ['SPICE', '#ffb347'], ['CLUB 9', '#c78cff'], ['BAR', '#ff4d6d'], ['REPAIR', '#7fa8ff'],
-  ['CANTINA', '#ffd166'], ['HOLO', '#66ffe0'],
+  ['NOODLES', '#f0c27a'], ['HOTEL', '#bcd8ec'], ['CAF', '#e8a0b8'], ['DROIDS', '#bfe6c4'],
+  ['SPICE', '#f0b070'], ['CLUB 9', '#c8b0e0'], ['BAR', '#e88070'], ['REPAIR', '#a8c0e8'],
+  ['CANTINA', '#f0cc80'], ['HOLO', '#b0e0d8'],
 ];
 
 function bannerTexture(text, color) {
@@ -98,7 +98,7 @@ function bannerTexture(text, color) {
   g.strokeStyle = color;
   g.lineWidth = 6;
   g.shadowColor = color;
-  g.shadowBlur = 14;
+  g.shadowBlur = 6;
   g.strokeRect(8, 8, 112, 624);
   g.fillStyle = color;
   g.textAlign = 'center';
@@ -117,7 +117,7 @@ function addBanners(group, segs, rng) {
   const cands = segs.filter((s) => s.kind === 'box' && s.sy > 60 && s.style[3] !== 4 && s.sx > 20 && s.sz > 20);
   for (const s of cands) {
     const d = Math.hypot(s.x, s.z);
-    if (d < 150 || d > 1100 || !rng.chance(d < 500 ? 0.75 : 0.45)) continue;
+    if (d < 150 || d > 1100 || !rng.chance(d < 500 ? 0.4 : 0.2)) continue;
     const y0 = s.y - s.sy / 2, y1 = s.y + s.sy / 2;
     const count = rng.int(1, 2);
     for (let k = 0; k < count; k++) {
@@ -144,7 +144,7 @@ function addBanners(group, segs, rng) {
     if (!list.length) return;
     const mat = patchFog(new THREE.MeshBasicMaterial({
       map: bannerTexture(text, color),
-      color: new THREE.Color(2.2, 2.2, 2.2),
+      color: new THREE.Color(1.05, 1.05, 1.05),
       side: THREE.DoubleSide,
     }));
     const mesh = new THREE.InstancedMesh(geo, mat, list.length);

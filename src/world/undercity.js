@@ -12,7 +12,7 @@ export function buildUndercity() {
   const g = new THREE.Group();
   const { x, y, z, w, d } = SHELF;
   const x0 = x - w / 2, x1 = x + w / 2, z0 = z - d / 2, z1 = z + d / 2;
-  const rust = patchFog(new THREE.MeshStandardMaterial({ color: 0x4a3a30, roughness: 0.9, metalness: 0.4 }));
+  const rust = patchFog(new THREE.MeshStandardMaterial({ color: 0x4a3a30, roughness: 0.9, metalness: 0.4 }), 1.4);
   slab(g, x0, z0, x1, z1, y, MAT.floorDark, 3);
   // Old girders under the deck, hanging into the dark.
   for (const gz of [z0 + 4, z, z1 - 4]) {

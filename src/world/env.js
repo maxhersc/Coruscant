@@ -50,8 +50,44 @@ vec3 applyFog(vec3 col, vec3 wp) {
 }
 `;
 
-// Make a built-in material use the world's fog instead of three's.
-export function patchFog(material) {
+// Weathering for every solid surface, from its world position alone, so no
+// prop needs UVs or a texture: plating seams in staggered rows, each plate a
+// slightly different shade, grime in blotches and grain, rain streaks down the
+// walls. Seams fade out with distance so they never shimmer.
+export const DETAIL_GLSL = /* glsl */ `
+float dHash(vec3 p) {
+  p = fract(p * 0.3183099 + 0.1);
+  p *= 17.0;
+  return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+}
+float dNoise(vec3 x) {
+  vec3 i = floor(x), f = fract(x);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(dHash(i), dHash(i + vec3(1, 0, 0)), f.x), mix(dHash(i + vec3(0, 1, 0)), dHash(i + vec3(1, 1, 0)), f.x), f.y),
+             mix(mix(dHash(i + vec3(0, 0, 1)), dHash(i + vec3(1, 0, 1)), f.x), mix(dHash(i + vec3(0, 1, 1)), dHash(i + vec3(1, 1, 1)), f.x), f.y), f.z);
+}
+float surfaceDetail(vec3 wp, float k) {
+  vec3 n = normalize(cross(dFdx(wp), dFdy(wp)));
+  vec3 a = abs(n);
+  vec2 uv = a.y > 0.6 ? wp.xz : (a.x > a.z ? wp.zy : wp.xy);
+  vec2 pg = uv / vec2(1.8, 0.9);
+  pg.x += floor(pg.y) * 0.5;
+  vec2 pf = fract(pg);
+  float seam = smoothstep(0.0, 0.025, pf.x) * smoothstep(0.0, 0.025, 1.0 - pf.x) * smoothstep(0.0, 0.05, pf.y) * smoothstep(0.0, 0.05, 1.0 - pf.y);
+  float aa = clamp(1.4 - length(fwidth(pg)) * 3.0, 0.0, 1.0);
+  seam = mix(1.0, seam, aa);
+  float tone = (dHash(vec3(floor(pg), 7.0)) - 0.5) * 0.14 * aa;
+  float grime = dNoise(wp * 0.3) * 0.65 + dNoise(wp * 2.3) * 0.35;
+  float streak = a.y < 0.6 ? dNoise(vec3(uv.x * 2.5, wp.y * 0.06, 0.0)) : 0.4;
+  float f = 1.02 + tone + (grime - 0.5) * 0.3 - streak * 0.12;
+  f *= mix(0.62, 1.0, seam);
+  return mix(1.0, f, k);
+}
+`;
+
+// Make a built-in material use the world's fog instead of three's. detail:
+// how strongly to weather it (0 for glass, glows and signs).
+export function patchFog(material, detail = 0) {
   material.fog = false;
   const prev = material.onBeforeCompile;
   material.onBeforeCompile = (shader, r) => {
@@ -69,20 +105,31 @@ export function patchFog(material) {
         vFogWorld = (modelMatrix * fogWp).xyz;`
       );
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vFogWorld;\n' + SKY_GLSL)
+      .replace('#include <common>', '#include <common>\nvarying vec3 vFogWorld;\n' + SKY_GLSL + (detail ? DETAIL_GLSL : ''))
       .replace('#include <fog_fragment>', 'gl_FragColor.rgb = applyFog(gl_FragColor.rgb, vFogWorld);');
+    if (detail) {
+      shader.fragmentShader = shader.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>\n  diffuseColor.rgb *= surfaceDetail(vFogWorld, ${detail.toFixed(2)});`);
+    }
   };
-  material.customProgramCacheKey = () => 'worldfog';
+  material.customProgramCacheKey = () => (detail ? `worldfog-d${detail.toFixed(2)}` : 'worldfog');
   return material;
 }
 
 // Convenience constructors for prop materials.
+// Solid materials are weathered unless opts.detail says otherwise.
 export function stdMat(color, opts = {}) {
-  return patchFog(new THREE.MeshStandardMaterial({ color, roughness: 0.7, metalness: 0.2, ...opts }));
+  const { detail = 1, ...rest } = opts;
+  return patchFog(new THREE.MeshStandardMaterial({ color, roughness: 0.7, metalness: 0.2, ...rest }), detail);
 }
 
+// Lights and glowing trim. The city's light is mostly warm and practical, so
+// every glow is pulled a third of the way toward warm white and dimmed: colour
+// is an accent, not the whole look.
+const WARM = new THREE.Color(1, 0.86, 0.68);
 export function glowMat(color, intensity = 3) {
-  const c = new THREE.Color(color).multiplyScalar(intensity);
+  const c = new THREE.Color(color);
+  const lum = c.r * 0.3 + c.g * 0.55 + c.b * 0.15;
+  c.lerp(WARM.clone().multiplyScalar(Math.max(0.4, lum)), 0.35).multiplyScalar(intensity * 0.65);
   return patchFog(new THREE.MeshBasicMaterial({ color: c }));
 }
 
@@ -92,8 +139,8 @@ const KEYS = [
   { e: -0.18, zen: [0.01, 0.012, 0.04], hor: [0.16, 0.08, 0.12], glow: [0.6, 0.27, 0.12], sun: [0.15, 0.17, 0.28], amb: [0.08, 0.08, 0.13] },
   { e: -0.04, zen: [0.06, 0.06, 0.18], hor: [0.75, 0.3, 0.2], glow: [0.6, 0.3, 0.15], sun: [0.9, 0.35, 0.15], amb: [0.18, 0.14, 0.2] },
   { e: 0.06, zen: [0.14, 0.17, 0.4], hor: [1.15, 0.55, 0.28], glow: [0.6, 0.38, 0.22], sun: [1.6, 0.75, 0.38], amb: [0.32, 0.26, 0.3] },
-  { e: 0.3, zen: [0.18, 0.34, 0.72], hor: [0.66, 0.68, 0.7], glow: [0.5, 0.44, 0.38], sun: [2.0, 1.85, 1.6], amb: [0.42, 0.44, 0.52] },
-  { e: 1.0, zen: [0.14, 0.3, 0.72], hor: [0.58, 0.66, 0.76], glow: [0.46, 0.44, 0.42], sun: [2.3, 2.2, 2.0], amb: [0.46, 0.5, 0.58] },
+  { e: 0.3, zen: [0.2, 0.34, 0.66], hor: [0.82, 0.72, 0.6], glow: [0.56, 0.46, 0.36], sun: [2.1, 1.85, 1.5], amb: [0.46, 0.44, 0.44] },
+  { e: 1.0, zen: [0.17, 0.32, 0.66], hor: [0.76, 0.72, 0.66], glow: [0.52, 0.46, 0.4], sun: [2.35, 2.15, 1.8], amb: [0.5, 0.49, 0.5] },
 ];
 
 function lerpKey(e, field, out) {

@@ -32,9 +32,9 @@ export function buildSpeederMesh(modelId, override = {}) {
   for (const [k, v] of Object.entries(override)) if (v !== null && v !== undefined) m[k] = v;
   if (m.shape) return buildShaped(m);
   const g = new THREE.Group();
-  const hull = stdMat(m.color, { roughness: 0.35, metalness: 0.65 });
+  const hull = stdMat(m.color, { roughness: 0.35, metalness: 0.65, detail: 0.5 });
   const dark = stdMat(0x1c1d22, { roughness: 0.4, metalness: 0.7 });
-  const glass = stdMat(0x0a1a28, { roughness: 0.05, metalness: 0.9, emissive: 0x0a2a40 });
+  const glass = stdMat(0x0a1a28, { roughness: 0.05, metalness: 0.9, emissive: 0x0a2a40, detail: 0 });
   const exhaust = glowMat(m.accent, 3);
 
   const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.75, 3.2, 6, 14), hull);
@@ -73,7 +73,7 @@ export function buildSpeederMesh(modelId, override = {}) {
   const light = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.08, 0.06), glowMat(0xfff2dd, 4));
   light.position.set(0, -0.05, 3.55);
   g.add(light);
-  const under = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.04, 2.6), glowMat(m.accent, 1.5));
+  const under = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.04, 2.6), glowMat(m.accent, 0.5));
   under.position.set(0, -0.42, 0);
   g.add(under);
   return { group: g, exhaust };
@@ -82,9 +82,9 @@ export function buildSpeederMesh(modelId, override = {}) {
 // The other hull shapes: a bike, a sky yacht, a hauler and a racer.
 function buildShaped(m) {
   const g = new THREE.Group();
-  const hull = stdMat(m.color, { roughness: 0.35, metalness: 0.65 });
+  const hull = stdMat(m.color, { roughness: 0.35, metalness: 0.65, detail: 0.5 });
   const dark = stdMat(0x1c1d22, { roughness: 0.4, metalness: 0.7 });
-  const glass = stdMat(0x0a1a28, { roughness: 0.05, metalness: 0.9, emissive: 0x0a2a40 });
+  const glass = stdMat(0x0a1a28, { roughness: 0.05, metalness: 0.9, emissive: 0x0a2a40, detail: 0 });
   const exhaust = glowMat(m.accent, 3);
   const trim = glowMat(m.accent, 1.5);
   const add = (geo, mat, x, y, z, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1) => {
@@ -141,7 +141,7 @@ function buildShaped(m) {
     for (const side of [-1, 1]) add(new THREE.BoxGeometry(0.08, 0.6, 0.5), hull, side * 1.3, 0.45, -2.6);
     add(new THREE.BoxGeometry(1.0, 0.05, 0.06), glowMat(0xfff2dd, 4), 0, -0.05, 3.3);
   }
-  add(new THREE.BoxGeometry(0.9, 0.04, 2.4), glowMat(m.accent, 1.5), 0, -0.45, 0);
+  add(new THREE.BoxGeometry(0.9, 0.04, 2.4), glowMat(m.accent, 0.5), 0, -0.45, 0);
   return { group: g, exhaust };
 }
 

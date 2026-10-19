@@ -48,7 +48,14 @@ and glow if it drops below 40 fps, raising them again when there is headroom.
   lights that change through the night. Not all of them are boxes: tapering
   needles girdled by glowing halo rings, saucer towers (a wide disc and dome on
   a thin stem), twin towers joined by skybridges, ziggurats, three-sided
-  blades, hexagonal and domed round towers.
+  blades, hexagonal and domed round towers. Facades vary (window grids, ribbon
+  windows, slits between deep piers, double-height panes) and weather with
+  grime and rain streaks; roofs carry plant rooms, vents and tanks.
+- **The look**: sand, ivory and bronze towers in a warm haze, practical warm
+  light, and colour used as an accent rather than everywhere. Every wall,
+  floor and prop is weathered in the shader from its world position (plating
+  seams, uneven plates, grime and streaks), so nothing needs a texture file,
+  and deck floors are bolted, scuffed plating.
 - **About 14,000 craft on the skylanes.** Their positions are computed on the
   GPU from lane and clock, so the whole fleet costs two draw calls. Air
   taxis land on pads, wait and take off again. Police patrol with light bars.

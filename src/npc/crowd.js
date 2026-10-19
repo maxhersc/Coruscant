@@ -135,8 +135,8 @@ export function createCrowd(zones) {
   const droids = npcs.filter((n) => n.droid);
   const coats = people.filter((n) => !n.robe), robes = people.filter((n) => n.robe);
   const tailed = people.filter((n) => n.tails);
-  const clothMat = stdMat(0xffffff, { roughness: 0.85, metalness: 0.05 });
-  const skinMat = stdMat(0xffffff, { roughness: 0.7, metalness: 0 });
+  const clothMat = stdMat(0xffffff, { roughness: 0.85, metalness: 0.05, detail: 0 });
+  const skinMat = stdMat(0xffffff, { roughness: 0.7, metalness: 0, detail: 0 });
   const IM = (geo, m, n) => {
     const mesh = new THREE.InstancedMesh(geo, m, Math.max(n, 1));
     mesh.count = n;
@@ -150,7 +150,7 @@ export function createCrowd(zones) {
   const legMesh = IM(legGeo, clothMat, coats.length * 2);
   const armMesh = IM(armGeo, clothMat, people.length * 2);
   const tailMesh = IM(tailGeo, skinMat, tailed.length);
-  const droidMesh = IM(droidGeo, stdMat(0xffffff, { roughness: 0.3, metalness: 0.8 }), droids.length);
+  const droidMesh = IM(droidGeo, stdMat(0xffffff, { roughness: 0.3, metalness: 0.8, detail: 0.3 }), droids.length);
   const eyeMesh = IM(eyeGeo, glowMat(0xff5533, 3), droids.length);
   const c = new THREE.Color();
   coats.forEach((n, i) => {

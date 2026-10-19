@@ -40,6 +40,25 @@ export function generateCity(collision, reservedFn) {
     }
   };
 
+  // Machinery on a roof: plant rooms, vents and tanks in weathered metal.
+  // The skyline's texture up close is mostly this.
+  const greebles = (x, z, y, cw, cd, st, n) => {
+    const plain = [st[0], 0, st[2], 6];
+    for (let k = 0; k < n; k++) {
+      const gw = vrng.range(3, Math.max(3.5, Math.min(14, cw * 0.32))), gd = vrng.range(3, Math.max(3.5, Math.min(14, cd * 0.32)));
+      const gh = vrng.range(1.5, 7);
+      const gx = x + vrng.range(-1, 1) * Math.max(0, cw / 2 - gw / 2 - 1.5), gz = z + vrng.range(-1, 1) * Math.max(0, cd / 2 - gd / 2 - 1.5);
+      if (vrng.chance(0.28)) {
+        const r = Math.min(gw, gd);
+        addSeg('cyl', gx, y, gz, r, gh * 1.3, r, plain, false);
+      } else {
+        addSeg('box', gx, y, gz, gw, gh, gd, plain);
+        // A smaller unit stacked on some.
+        if (vrng.chance(0.35)) addSeg('box', gx + vrng.range(-1, 1) * gw * 0.2, y + gh, gz, gw * 0.5, gh * 0.5, gd * 0.5, plain, false);
+      }
+    }
+  };
+
   // A stepped tower: base, setbacks with glowing ledges, optional spire.
   const steppedTower = (x, z, w, d, H, core, opts = {}) => {
     const st = style(core, opts);
@@ -64,6 +83,7 @@ export function generateCity(collision, reservedFn) {
       } else addSeg('box', x, y, z, cw, top - y, cd, st);
       if (s < n - 1) {
         addSeg('box', x, top - 2.5, z, cw * 1.035 + 0.6, 2.5, cd * 1.035 + 0.6, [st[0], 0, 0.6, 4], false);
+        if (core > 0.02 && !opts.flatTop) greebles(x, z, top, cw, cd, st, vrng.int(1, 3));
         cw *= rng.range(0.66, 0.84);
         cd *= rng.range(0.66, 0.84);
       }
@@ -85,6 +105,7 @@ export function generateCity(collision, reservedFn) {
         beacons.push([ax, y + ah, az]);
       }
     }
+    if (!opts.flatTop && core > 0.02) greebles(x, z, y, cw, cd, st, vrng.int(2, 5));
     beacons.push([x + cw / 2, y, z + cd / 2], [x - cw / 2, y, z - cd / 2]);
     return { top: y, w: cw, d: cd, room };
   };

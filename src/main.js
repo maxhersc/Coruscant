@@ -71,7 +71,7 @@ scene.add(hemi, sun, sun.target);
 
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), 0.7, 0.35, 0.95);
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), 0.42, 0.3, 0.98);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
 

@@ -5,6 +5,8 @@ import { world } from '../core/collision.js';
 // Shared prop materials and builders for the walkable districts. Every solid
 // builder also registers its collider.
 
+// Deck plating: big plates with darker seams, bolts at the corners, scuffs
+// and oil stains. tiles: plates per side of the texture.
 function tileTexture(base, line, size = 512, tiles = 4) {
   const c = document.createElement('canvas');
   c.width = c.height = size;
@@ -14,13 +16,33 @@ function tileTexture(base, line, size = 512, tiles = 4) {
   const step = size / tiles;
   for (let i = 0; i < tiles; i++) {
     for (let j = 0; j < tiles; j++) {
-      const v = Math.random() * 18 - 9;
+      const v = Math.random() * 22 - 11;
       g.fillStyle = `rgba(${v > 0 ? 255 : 0},${v > 0 ? 255 : 0},${v > 0 ? 255 : 0},${Math.abs(v) / 255})`;
       g.fillRect(i * step, j * step, step, step);
+      // Bolts in each corner.
+      g.fillStyle = 'rgba(0,0,0,0.35)';
+      for (const [bx, by] of [[0.08, 0.08], [0.92, 0.08], [0.08, 0.92], [0.92, 0.92]]) {
+        g.beginPath(); g.arc((i + bx) * step, (j + by) * step, size / 160, 0, 7); g.fill();
+      }
+      // Some plates have a ribbed or grated insert.
+      if (Math.random() < 0.25) {
+        g.strokeStyle = 'rgba(0,0,0,0.18)';
+        g.lineWidth = 2;
+        for (let k = 0.25; k < 0.8; k += 0.07) { g.beginPath(); g.moveTo((i + 0.2) * step, (j + k) * step); g.lineTo((i + 0.8) * step, (j + k) * step); g.stroke(); }
+      }
     }
   }
+  // Scuffs and stains.
+  for (let k = 0; k < 40; k++) {
+    const x = Math.random() * size, y = Math.random() * size, r = 4 + Math.random() * 30;
+    const grad = g.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, `rgba(20,14,8,${0.05 + Math.random() * 0.12})`);
+    grad.addColorStop(1, 'rgba(20,14,8,0)');
+    g.fillStyle = grad;
+    g.fillRect(x - r, y - r, r * 2, r * 2);
+  }
   g.strokeStyle = line;
-  g.lineWidth = 3;
+  g.lineWidth = 4;
   for (let i = 0; i <= tiles; i++) {
     g.beginPath(); g.moveTo(i * step, 0); g.lineTo(i * step, size); g.stroke();
     g.beginPath(); g.moveTo(0, i * step); g.lineTo(size, i * step); g.stroke();
@@ -34,32 +56,34 @@ function tileTexture(base, line, size = 512, tiles = 4) {
 
 export const MAT = {};
 export function initMaterials() {
-  MAT.floor = stdMat(0xffffff, { map: tileTexture('#8d8a84', '#6c6964'), roughness: 0.3, metalness: 0.3 });
-  MAT.floorDark = stdMat(0xffffff, { map: tileTexture('#4d4a48', '#2f2d2c'), roughness: 0.7 });
-  MAT.floorWarm = stdMat(0xffffff, { map: tileTexture('#7a5a44', '#4a3528', 512, 8), roughness: 0.5 });
+  MAT.floor = stdMat(0xffffff, { map: tileTexture('#a0978a', '#655e54'), roughness: 0.45, metalness: 0.3, detail: 0.5 });
+  MAT.floorDark = stdMat(0xffffff, { map: tileTexture('#56514b', '#2f2c29'), roughness: 0.7, detail: 0.5 });
+  MAT.floorWarm = stdMat(0xffffff, { map: tileTexture('#7a5a44', '#4a3528', 512, 8), roughness: 0.5, detail: 0.5 });
   MAT.under = stdMat(0x2a2a2e, { roughness: 0.9 });
-  MAT.metal = stdMat(0x5a5f66, { roughness: 0.35, metalness: 0.7 });
+  MAT.metal = stdMat(0x6a665e, { roughness: 0.45, metalness: 0.7 });
   MAT.darkMetal = stdMat(0x24262b, { roughness: 0.4, metalness: 0.6 });
   MAT.wall = stdMat(0xb9b2a5, { roughness: 0.8 });
-  MAT.wallDark = stdMat(0x3c3a40, { roughness: 0.7 });
+  MAT.wallDark = stdMat(0x4a443f, { roughness: 0.7 });
   MAT.wood = stdMat(0x5b3a26, { roughness: 0.6 });
   MAT.cloth = stdMat(0x7a2a2a, { roughness: 0.9 });
   MAT.felt = stdMat(0x0f5a3a, { roughness: 0.95 });
   MAT.plant = stdMat(0x2f6b3a, { roughness: 0.9 });
   MAT.trunk = stdMat(0x4a3424, { roughness: 0.9 });
   MAT.glass = patchFog(new THREE.MeshStandardMaterial({ color: 0x9fd8ff, roughness: 0.05, metalness: 0.3, transparent: true, opacity: 0.18, depthWrite: false }));
-  MAT.screen = glowMat(0x66ccff, 1.6);
-  MAT.neonCyan = glowMat(0x33ddff, 4);
-  MAT.neonAmber = glowMat(0xffaa33, 4);
-  MAT.neonMagenta = glowMat(0xff3399, 4);
-  MAT.neonGreen = glowMat(0x55ff88, 4);
-  MAT.neonWhite = glowMat(0xfff2dd, 3);
+  MAT.screen = glowMat(0x9fc4dc, 1.2);
+  // Accent lights: a pale steel blue, amber, a warm red, a pale green and warm
+  // white. Kept low so they read as lit trim rather than neon tubing.
+  MAT.neonCyan = glowMat(0x8fc4e8, 1.9);
+  MAT.neonAmber = glowMat(0xffa040, 2.1);
+  MAT.neonMagenta = glowMat(0xe0604a, 1.9);
+  MAT.neonGreen = glowMat(0x9fdcaa, 1.7);
+  MAT.neonWhite = glowMat(0xfff2dd, 1.9);
   MAT.lampGlow = glowMat(0xffd9a0, 5);
   // Ceiling panels light a room without flooding it with bloom.
   MAT.ceilWhite = glowMat(0xfff2dd, 0.9);
-  MAT.ceilMagenta = glowMat(0xff66b3, 0.9);
+  MAT.ceilMagenta = glowMat(0xffb0a0, 0.9);
   MAT.ceilAmber = glowMat(0xffb35a, 0.9);
-  MAT.railGlow = glowMat(0x33ddff, 1.4);
+  MAT.railGlow = glowMat(0xffd9a8, 0.45);
   // Soft cones of light under street lamps: brightest at the bulb, fading to
   // nothing at the ground and at the cone's edges, and only at night.
   MAT.lampCone = new THREE.ShaderMaterial({
@@ -96,12 +120,12 @@ export function initMaterials() {
         #include <logdepthbuf_fragment>
       }`,
   });
-  MAT.padGlow = glowMat(0xffaa33, 1.6);
-  MAT.padLight = glowMat(0x55ff88, 2.2);
-  MAT.neonCyan.userData.css = '#7feaff';
-  MAT.neonAmber.userData.css = '#ffc266';
-  MAT.neonMagenta.userData.css = '#ff7ac0';
-  MAT.neonGreen.userData.css = '#8dffad';
+  MAT.padGlow = glowMat(0xffaa33, 1.1);
+  MAT.padLight = glowMat(0xffd9a0, 1.6);
+  MAT.neonCyan.userData.css = '#bcd8ec';
+  MAT.neonAmber.userData.css = '#ffc27a';
+  MAT.neonMagenta.userData.css = '#f0a08a';
+  MAT.neonGreen.userData.css = '#c4e8c8';
   MAT.neonWhite.userData.css = '#fff2dd';
 }
 
@@ -205,7 +229,7 @@ export function textTexture(text, opts = {}) {
   const size = opts.size || Math.floor(h * (opts.glyphs ? 0.42 : 0.6));
   g.font = `${opts.weight || 700} ${size}px ${opts.font || '"Arial Narrow", "Helvetica Neue", Arial, sans-serif'}`;
   g.shadowColor = opts.fg || '#fff';
-  g.shadowBlur = opts.blur ?? 12;
+  g.shadowBlur = opts.blur ?? 5;
   const lines = String(text).split('\n');
   const lh = size * 1.1;
   const top = h / 2 - (lines.length - 1) * lh / 2 - (opts.glyphs ? h * 0.12 : 0);
@@ -243,7 +267,7 @@ export function sign(parent, text, x, y, z, w, h, facing, opts = {}) {
   const tex = textTexture(text, { w: 1024, h: Math.round(1024 * h / w), ...opts });
   const mat = patchFog(new THREE.MeshBasicMaterial({
     map: tex,
-    color: new THREE.Color(1, 1, 1).multiplyScalar(opts.intensity ?? 2.2),
+    color: new THREE.Color(1, 1, 1).multiplyScalar((opts.intensity ?? 2.2) * 0.55),
     transparent: true,
     depthWrite: false,
     side: opts.twoSided ? THREE.FrontSide : THREE.DoubleSide,

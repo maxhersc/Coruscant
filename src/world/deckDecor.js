@@ -32,8 +32,8 @@ function mats() {
     }),
     cross: glowMat(0x55ff88, 1.8),
     water: glowMat(0x66ddff, 1.3),
-    tileA: glowMat(0xff3399, 1.4),
-    tileB: glowMat(0x33ddff, 1.4),
+    tileA: glowMat(0xff3399, 1.0),
+    tileB: glowMat(0x33ddff, 1.0),
     ring: glowMat(0xff3399, 3),
     amber: glowMat(0xffaa33, 3),
     redLight: glowMat(0xff3322, 4),
@@ -49,7 +49,10 @@ function mats() {
       club: [0x2a1438, 0.5, 0.35], yard: [0x6a6a62, 0.9, 0.18], data: [0x0e1a2c, 0.4, 0.3],
       shrine: [0x6a4428, 0.7, 0.3], diner: [0x8a4f2e, 0.75, 0.3], embassy: [0xb8b1a2, 0.6, 0.2],
       gallery: [0xeeeeec, 0.25, 0.12],
-    }).map(([k, [c, roughness, glow]]) => [k, stdMat(c, { roughness, emissive: c, emissiveIntensity: glow })])),
+    }).map(([k, [c, roughness, glow]]) => [k, stdMat(c, { roughness, emissive: c, emissiveIntensity: glow * 0.45 })])),
+    // Seams between deck plates, and painted hazard stripes.
+    seam: stdMat(0x2a2622, { roughness: 0.8 }),
+    hazard: stdMat(0xc8a030, { roughness: 0.7 }),
     growLight: glowMat(0xcc66ff, 1.6),
     warm: glowMat(0xffc27a, 2.2),
     crossDim: glowMat(0x55ff88, 1),
@@ -117,7 +120,7 @@ export function decorateDeck(g, d, place, rng) {
       }
       deco(B.x0, 3.4, B.z0 + 1.5, B.x1, 3.55, B.z0 + 7, MAT.glass);
       for (const x of [B.x0 + 0.2, B.x1 - 0.2]) solid(x - 0.12, 0, B.z0 + 1.5, x + 0.12, 3.4, B.z0 + 1.75, MAT.metal);
-      border(m.crossDim);
+      border(MAT.metal);
       venueSign(17, '#8dffad');
       break;
     }
@@ -203,7 +206,7 @@ export function decorateDeck(g, d, place, rng) {
       solid(B.x0 + 1, 0, B.z1 - 0.8, B.x1 - 1, 3.4, B.z1 - 0.4, MAT.wallDark);
       for (const x of along(B.x0 + 1.5, B.x1 - 1.5, 0.9)) mesh(cyl(0.1, 0.45, 6), m.art[Math.floor(x) % 4], x, 1.9, B.z1 - 0.95);
       for (const x of along(B.x0 + 1, B.x1 - 1, 2.2)) mesh(cyl(0.3, 0.75, 10), MAT.metal, x, 0.375, B.cz - 1.6);
-      gridLines(m.gridMagenta, 8);
+      gridLines(m.seam, 8);
       venueSign(14.5, '#ff7ac0');
       break;
     }
@@ -228,8 +231,8 @@ export function decorateDeck(g, d, place, rng) {
         solid(x - 1.2, 0, B.cz - 0.8, x + 1.2, 0.4, B.cz + 0.8, MAT.darkMetal);
       }
       for (let q = 0; q < 6; q++) mesh(cyl(0.4, 1.1, 10), m.red, B.x1 - 4 + (q % 3) * 0.9, 0.55, B.cz + (q > 2 ? 1 : -0.6));
-      border(m.amber, 1.6);
-      for (const x of along(x0 + 2, x1 - 2, 3)) deco(x - 0.6, 0.05, z1 - 2.6, x + 0.6, 0.08, z1 - 2.1, m.amber);
+      border(m.hazard, 1.6);
+      for (const x of along(x0 + 2, x1 - 2, 3)) deco(x - 0.6, 0.05, z1 - 2.6, x + 0.6, 0.08, z1 - 2.1, m.hazard);
       venueSign(29, '#ffc266');
       break;
     }
@@ -252,7 +255,7 @@ export function decorateDeck(g, d, place, rng) {
       }
       solid(B.x1 - 6, 0, B.cz - 2, B.x1 - 1, 2.2, B.cz + 2, MAT.metal);
       for (let q = 0; q < 4; q++) deco(B.x1 - 6.05, 0.4 + q * 0.45, B.cz - 1.6, B.x1 - 6, 0.6 + q * 0.45, B.cz + 1.6, MAT.darkMetal);
-      gridLines(m.gridCyan, 6);
+      gridLines(m.seam, 6);
       venueSign(15, '#7feaff');
       break;
     }
