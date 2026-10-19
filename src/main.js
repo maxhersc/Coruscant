@@ -43,8 +43,7 @@ import { updateHUD, toast, showLocation, setPrompt, speech } from './ui/hud.js';
 import { initMap, drawMap, setupMap } from './ui/map.js';
 import { nav, buildPlaces, guidance, arrived, setTarget, clearTarget } from './systems/nav.js';
 import { initAudio, updateAudio, sfx } from './audio/audio.js';
-import { batchStatic } from './world/batch.js';
-import { buildInteriors, buildEntrances, buildShopfronts, INTERIORS, SHOPFRONTS } from './world/interiors.js';
+import { buildInteriors, SHOPS, ROOMS, roomAt } from './world/interiors.js';
 import { buildHomes, HOMES, DAILY, ownsHome, openRealty, openArt, homePos, buyHome } from './world/homes.js';
 import { openPoker, openDance, openDodger, openSlicer, openEatOff, scoreHand, makeGrid } from './games/minigames.js';
 import { hasBuff } from './systems/state.js';
@@ -145,17 +144,23 @@ async function build() {
   scene.add(district.group);
   const shelf = buildUndercity();
   scene.add(shelf.group);
-  // Doors into buildings, the rooms behind them, and homes for sale.
-  const doors = new THREE.Group();
-  buildEntrances(doors);
-  buildShopfronts(doors);
-  batchStatic(doors);
-  scene.add(doors);
+  // The venues inside the deck towers, the market's shops, and homes for sale.
   const interiors = buildInteriors(scene);
-  // One lamp follows you indoors; outside it is switched off (left in the
-  // scene so the shaders never recompile).
-  const indoorLight = new THREE.PointLight(0xffffff, 0, 60, 1.4);
+  // One lamp lights whichever room you are in; outside it is switched off
+  // (left in the scene so the shaders never recompile).
+  const indoorLight = new THREE.PointLight(0xffffff, 0, 60, 1.3);
   scene.add(indoorLight);
+  // The lift car, seen only while you ride it.
+  const liftCar = new THREE.Group();
+  const carFloor = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.4, 0.15, 24), MAT.darkMetal);
+  carFloor.position.y = -0.08;
+  const carRing = new THREE.Mesh(new THREE.TorusGeometry(1.4, 0.06, 6, 28), MAT.neonCyan);
+  carRing.rotation.x = Math.PI / 2;
+  const carTop = carRing.clone();
+  carTop.position.y = 3;
+  liftCar.add(carFloor, carRing, carTop);
+  liftCar.visible = false;
+  scene.add(liftCar);
   const homes = buildHomes(scene, { monolith: city.monoliths[0], frame: district.frames[0] });
   await step(40, 'Lighting the windows…');
   scene.add(buildCityMeshes(city.segs));
@@ -206,7 +211,7 @@ async function build() {
     ...people.people.filter((p) => !p.visible).map((p) => ({ name: p.name, get pos() { return p.talkAt || p.pos; }, group: 'People', hint: p.title, level: Math.hypot(p.pos.x, p.pos.z) < 170 ? p.pos.y : undefined })),
     { name: 'Undercity Shelf', pos: shelf.center, group: 'Hidden places', hint: 'An old platform below the clouds' },
     ...Object.entries(HOMES).map(([id, d]) => ({ name: d.name, get pos() { return homePos(id).door; }, group: 'Homes', get hint() { return ownsHome(id) ? `Yours · ${d.where}` : `For sale, ${d.price.toLocaleString()} cr · ${d.where}`; } })),
-    ...SHOPFRONTS.map((f) => ({ name: f.label.replace(/^the /, 'The '), pos: new THREE.Vector3(f.x, LEVELS.market, -82.6), group: 'Shops', hint: `${f.hint} · Galleria Market`, level: LEVELS.market })),
+    ...SHOPS.map((f) => ({ name: f.label, pos: f.door, group: 'Shops', hint: `${f.hint} · Galleria Market`, level: LEVELS.market })),
     ...interactables.filter((it) => (it.action === 'shop' && !it.data.shop.startsWith('deck:')) || it.action === 'chips').map((it) => {
       const def = trade.shopDef(it.action === 'chips' ? 'chips' : it.data.shop);
       return { name: def.name, pos: it.pos, group: 'Shops', hint: `Buys and sells · ${def.where}`, level: Math.hypot(it.pos.x, it.pos.z) < 170 ? it.pos.y : undefined };
@@ -216,7 +221,7 @@ async function build() {
   $('map-center').onclick = () => mapUI.recenter();
   await step(92, 'Compiling shaders…');
 
-  G = { beacon, city, district, traffic, ads, atmosphere, crowd, walker, speeder, rig, race, flyers, gaterun, people, shelf, interiors, homes, indoorLight, elevator: district.elevator };
+  G = { beacon, city, district, traffic, ads, atmosphere, crowd, walker, speeder, rig, race, flyers, gaterun, people, shelf, interiors, homes, indoorLight, liftCar, elevator: district.elevator };
 
   // Place the player (from a save, or fresh on the promenade).
   const extra = loadGame();
@@ -232,7 +237,11 @@ async function build() {
     speeder.park(132, LEVELS.promenade, 0, -Math.PI / 2);
   }
   rig.yaw = Math.PI / 2;
-  if (state.inside && INTERIORS[state.inside.id]) lightIndoors(INTERIORS[state.inside.id]);
+  // Saves from when rooms were somewhere else entirely.
+  if (state.inside || walker.pos.y < -100) {
+    state.inside = undefined;
+    walker.place(68, LEVELS.promenade, 0, Math.PI / 2);
+  }
   if (params.has('t')) state.minutes = Number(params.get('t')) * 60;
 
   // Warm up: one render compiles every program before the player sees it.
@@ -505,39 +514,50 @@ function searchCache() {
 
 // ------------------------------------------------------------------ Inside buildings
 const DRESS_CODE = { noble: 'The doorman looks you up and down. "The salon is formal wear only." (Threads, in the Galleria Market, can fix that.)', embassy: 'A guard droid blocks the door. "Visitors must be formally dressed." (Try Threads in the Galleria Market.)' };
-function enterInterior(data) {
-  const def = INTERIORS[data.interior];
-  if (!def) return;
-  if (DRESS_CODE[data.interior] && !wearing('formal')) { toast(DRESS_CODE[data.interior], 'bad', 7000); sfx('lose'); return; }
-  if (data.interior === 'club' && !wearing('party')) {
-    if (state.credits < 20) { toast('The bouncer wants a 20 cr cover. You do not have it.', 'bad'); sfx('lose'); return; }
+// The glass lift between a deck and the venue in the storey below it.
+let ride = null;
+function startRide(data, down) {
+  if (ride || mode !== 'walk') return;
+  if (down && DRESS_CODE[data.theme] && !wearing('formal')) { toast(DRESS_CODE[data.theme], 'bad', 7000); sfx('lose'); return; }
+  if (down && data.theme === 'club' && !wearing('party')) {
+    if (state.credits < 20) { toast('The lift wants a 20 cr cover charge for the club. You do not have it.', 'bad'); sfx('lose'); return; }
     addCredits(-20, 'Club cover charge');
   }
-  fade(() => {
-    state.inside = { id: data.interior, back: data.back, venue: data.venue };
-    def.setName(data.venue);
-    lightIndoors(def);
-    G.walker.place(def.entry.x, def.entry.y, def.entry.z, 0);
-    G.rig.yaw = 0;
-    G.rig.pitch = -0.1;
-    toast(`Inside ${data.venue.replace(/\b\w+/g, (w) => w[0] + w.slice(1).toLowerCase())}.`, 'info', 3000);
-  }, 400);
+  const from = down ? data.top : data.bottom, to = down ? data.bottom : data.top;
+  ride = { from: from.clone(), to: to.clone(), t: 0, dur: Math.abs(from.y - to.y) / 3.5 + 0.8 };
+  G.walker.place(from.x, from.y, from.z, 0);
+  G.liftCar.visible = true;
+  sfx('lift');
+  toast(down ? `Down to ${data.venue}.` : 'Up to the roof.', 'info', 2000);
 }
-function exitInterior() {
-  const b = state.inside && state.inside.back;
-  fade(() => {
-    state.inside = null;
-    G.indoorLight.intensity = 0;
-    if (b) G.walker.place(b[0], b[1], b[2], 0);
-    else G.walker.place(68, LEVELS.promenade, 0, Math.PI / 2);
+function updateRide(dt) {
+  const w = G.walker;
+  ride.t += dt;
+  const k = THREE.MathUtils.smoothstep(ride.t / ride.dur, 0, 1);
+  w.pos.lerpVectors(ride.from, ride.to, k);
+  w.vel.set(0, 0, 0);
+  w.syncModel(dt, 0);
+  G.liftCar.position.copy(w.pos);
+  if (ride.t >= ride.dur) {
+    // Step out through the door.
+    w.place(ride.to.x, ride.to.y, ride.to.z + 2.6, 0);
     G.rig.yaw = 0;
-  }, 400);
+    G.liftCar.visible = false;
+    ride = null;
+    sfx('lift');
+  }
 }
 
-function lightIndoors(def) {
-  G.indoorLight.position.copy(def.lamp);
-  G.indoorLight.color.set(def.light);
-  G.indoorLight.intensity = 260;
+// The one indoor lamp follows you from room to room.
+let curRoom = null;
+function lightRoom(room) {
+  curRoom = room;
+  const L = G.indoorLight;
+  if (!room) { L.intensity = 0; return; }
+  L.position.copy(room.lamp);
+  L.color.set(room.light);
+  L.distance = room.reach * 1.4;
+  L.intensity = 220 * Math.pow(room.reach / 28, 1.3);
 }
 
 function buyHomeFor(id) { return buyHome(id); }
@@ -698,12 +718,12 @@ function doAction(it) {
     }
     case 'lift-choose': openLiftPanel(); break;
     case 'viewer': startViewer(); break;
-    case 'enter': enterInterior(it.data); break;
-    case 'leave': exitInterior(); break;
+    case 'lift-down': startRide(it.data, true); break;
+    case 'lift-up': startRide(it.data, false); break;
     case 'bar': acts.openFood('ale', ctx); break;
     case 'feast': acts.openFood('feast', ctx); break;
     case 'eatoff': openEatOff(ctx); break;
-    case 'dance': openDance(ctx, { fee: state.inside && state.inside.id === 'club' && wearing('party') ? 0 : 20, bonus: wearing('party') ? 1.35 : 1 }); break;
+    case 'dance': openDance(ctx, { fee: curRoom && curRoom.id === 'club' && wearing('party') ? 0 : 20, bonus: wearing('party') ? 1.35 : 1 }); break;
     case 'arcade': openDodger(ctx); break;
     case 'poker': openPoker(ctx, it.data && it.data.stakes === 'high'
       ? { title: 'The high table', kicker: 'Noble salon · Holo Poker', bets: [100, 250, 500, 1000] }
@@ -998,7 +1018,7 @@ function update(dt) {
   // Toggles.
   if (pressed('KeyH')) { helpOpen = !helpOpen; $('help').classList.toggle('hidden', !helpOpen); }
   if (pressed('KeyO')) openSettings();
-  if (pressed('KeyV')) { if (state.inside) toast('Step outside first: your speeder cannot come indoors.', 'info'); else callSpeeder(); }
+  if (pressed('KeyV')) callSpeeder();
   if (pressed('KeyJ')) story.openJournal(() => clearTarget());
   if (pressed('KeyI')) trade.openInventory(ctx);
   // Honk. At a patrol, that is an invitation.
@@ -1023,7 +1043,8 @@ function update(dt) {
 
   let prompt = null;
   if (mode === 'walk') {
-    w.update(dt, rig.yaw);
+    if (ride) updateRide(dt);
+    else w.update(dt, rig.yaw);
     if (rig.override) rig.cinematic(dt);
     else {
       head.copy(w.pos).y += 1.6;
@@ -1079,7 +1100,9 @@ function update(dt) {
   G.ads.update(elapsed);
   G.flyers.update(dt, elapsed, s.parked ? s.pos : null);
   G.people.update(dt, w.pos, camera.position, elapsed);
-  updatePolice(dt, { player: focus, flying: mode === 'fly', speed: s.speed, flyers: G.flyers.flyers, hooks: policeHooks });
+  const room = mode === 'walk' ? roomAt(w.pos) : null;
+  if (room !== curRoom) lightRoom(room);
+  updatePolice(dt, { player: focus, flying: mode === 'fly', speed: s.speed, flyers: G.flyers.flyers, hooks: policeHooks, indoors: !!room || !!ride });
   if (police.wanted && police.dist < 700 && (sirenT -= dt) <= 0) { sirenT = 1.1; sfx('siren'); }
   updatePassenger(dt);
   // The hideout is off every map.
@@ -1104,7 +1127,7 @@ function update(dt) {
   }
 
   // Wayfinding.
-  const guide = state.inside ? null : guidance(focus, mode, s, mode === 'walk' && el.containsPlayer(w.pos));
+  const guide = guidance(focus, mode, s, mode === 'walk' && el.containsPlayer(w.pos));
   if (arrived(w.pos, mode)) {
     toast(`You've arrived: ${nav.target.name}.`, 'win', 3500);
     sfx('deliver');
@@ -1312,7 +1335,7 @@ build().then((extra) => {
     step: (n, dt = 1 / 30) => { for (let i = 0; i < n; i++) { update(dt); endFrame(); } },
     doAction: (action, data) => doAction({ action, data }),
     nearest: () => nearestInteract(G.walker.pos),
-    nav, openMap, closeMap, story, trade, jobs, police, dress, homes: { buy: (id) => buyHomeFor(id) }, interiors: INTERIORS, games: { scoreHand, makeGrid }, wearing, crime: (k) => crime(k, { player: mode === 'fly' ? G.speeder.pos : G.walker.pos, flyers: G.flyers.flyers, flying: mode === 'fly', hooks: policeHooks }), clearHeat, bump: (i) => { bumpCooldown = 0; onBump(i); },
+    nav, openMap, closeMap, story, trade, jobs, police, dress, homes: { buy: (id) => buyHomeFor(id) }, rooms: ROOMS, get room() { return curRoom; }, get riding() { return !!ride; }, games: { scoreHand, makeGrid }, wearing, crime: (k) => crime(k, { player: mode === 'fly' ? G.speeder.pos : G.walker.pos, flyers: G.flyers.flyers, flying: mode === 'fly', hooks: policeHooks }), clearHeat, bump: (i) => { bumpCooldown = 0; onBump(i); },
     guide: () => guidance(mode === 'fly' ? G.speeder.pos : G.walker.pos, mode, G.speeder, mode === 'walk' && G.elevator.containsPlayer(G.walker.pos)), setMode: (m) => (m === 'fly' ? boardSpeeder() : exitSpeeder()), begin, world, interactables, get mode() { return mode; }, get quality() { return QUALITY[qualityLevel].name; }, openSettings,
     setQuality: (name) => { settings.quality = name; applyQuality(Math.max(0, QUALITY.findIndex((q) => q.name === name))); }, totalMinutes };
 });

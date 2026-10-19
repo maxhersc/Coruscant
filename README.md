@@ -136,17 +136,19 @@ Arm it at the kiosk by the East Pad; the next gate glows amber. Under par pays
   patrol and its scanner's reach. A scanner jammer, a shadow cloak, the Ghost
   Runner, a diplomatic transponder and a shrine fortune all shrink that reach;
   your own hideout, or slicing your file at a data exchange, ends a chase.
-- **Inside buildings**: every rooftop deck has a lift down into the place
-  below it. Dance at the nightclubs (a rhythm game, with cover charge unless
+- **Inside buildings**: every deck tower's top storey is a real floor you
+  walk around in, a hall with window walls looking out over the city. A glass
+  lift booth on each deck rides down its shaft into the venue below. Dance at the nightclubs (a rhythm game, with cover charge unless
   you are dressed for it), get patched up or restyled at the clinics, feast or
   take on Big Oro in an eating contest at the food courts, play the arcade
   cabinet or slice security grids at the data exchanges, meditate or have your
   fortune told at the shrines (a day-long bonus), play the high table at the
   noble salons and buy permits at the embassies (both formal dress only), buy
   art at the galleries, use the parts counter and paint shop at the shipyards,
-  and pick fruit at the sky farms. On the Galleria Market's south side are
-  three more: **Threads** (clothes), the **Neon Arcade** (Skylane Dodger,
-  Holo Poker, slicing, a dance machine) and **Skyline Realty** (homes).
+  and pick fruit at the sky farms. On the Galleria Market's north side three
+  shops are rooms you walk into through open doors: **Threads** (clothes), the
+  **Neon Arcade** (Skylane Dodger, Holo Poker, slicing, a dance machine) and
+  **Skyline Realty** (homes). Patrols cannot follow you indoors.
 - **Clothes that change how you play**, from Threads: a neon street jacket
   (clubs let you in free and you dance better), a runner suit (run 30% faster,
   jump higher), a flight suit (sharper steering, free fall-catch), a tailored
@@ -204,7 +206,7 @@ src/
     undercity.js       the Undercity Shelf, below the clouds
     district.js        the Spire hub's four levels and the rooftop decks
     deckDecor.js       what stands on each kind of rooftop deck
-    interiors.js       deck lift entrances, shopfronts, and the rooms inside
+    interiors.js       the venues inside the deck towers, their lifts, and the market's shops
     homes.js           homes for sale, art and plants for their walls
     elevator.js        the glass lift
     props.js           prop builders (rails, rooms, stalls, signs, pads)
@@ -233,8 +235,9 @@ sleep, settings, wayfinding, the speeder valet, the whole storyline, a
 favour, the Gate Run, trading (buy, sell, cargo limit, using and installing
 items), the kinds of delivery (routes, heavy freight, passengers and their
 tips, smuggling), Spire Security (a scan, a stop, a search, losing a patrol
-under the clouds, honking and ramming, rising wanted levels), going into
-buildings (cover charges, dress codes), clothes (the boutique, the runner
+under the clouds, honking and ramming, rising wanted levels), riding a deck's
+lift down into its venue, walking the hall, walking into a shop (cover
+charges, dress codes), clothes (the boutique, the runner
 suit, the jump pack), homes (rent ends, the hideout ends a chase), cargo by
 speeder, Holo Poker hands, slicer grids, the arcade cabinet, and automatic
 quality.

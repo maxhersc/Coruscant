@@ -14,6 +14,9 @@ const DECK_NAMES = [
   'Lumen Yard', 'Krayt Shelf', 'Maro Overlook', 'Felucca Deck', 'Zentha Plaza', 'Obel Terrace',
 ];
 
+// Every deck tower's top storey is hollow: the venue the deck belongs to.
+export const VENUE_H = 9;
+
 export function generateCity(collision, reservedFn) {
   const rng = makeRng(42);
   // Variety (which unusual shape, domes, hexes) draws on its own stream.
@@ -41,11 +44,24 @@ export function generateCity(collision, reservedFn) {
   const steppedTower = (x, z, w, d, H, core, opts = {}) => {
     const st = style(core, opts);
     const n = opts.segments ?? rng.int(1, 3);
-    let y = 0, cw = w, cd = d;
+    let y = 0, cw = w, cd = d, room = null;
     const fr = n === 1 ? [1] : n === 2 ? [rng.range(0.5, 0.75), 1] : [rng.range(0.4, 0.6), rng.range(0.7, 0.88), 1];
     for (let s = 0; s < n; s++) {
       const top = H * fr[s];
-      addSeg('box', x, y, z, cw, top - y, cd, st);
+      if (opts.hollow && s === n - 1) {
+        // The top floor is a real storey you can walk around in: solid below,
+        // a roof slab above, and walls a metre thick at the facade.
+        const floor = top - opts.hollow - 1, ceil = top - 1;
+        addSeg('box', x, y, z, cw, top - y, cd, st, false);
+        const x0 = x - cw / 2, x1 = x + cw / 2, z0 = z - cd / 2, z1 = z + cd / 2;
+        collision.addBox(x0, y, z0, x1, floor, z1, 'tower');
+        collision.addBox(x0, ceil, z0, x1, top, z1, 'tower');
+        collision.addBox(x0, floor, z0, x0 + 1, ceil, z1, 'tower');
+        collision.addBox(x1 - 1, floor, z0, x1, ceil, z1, 'tower');
+        collision.addBox(x0 + 1, floor, z0, x1 - 1, ceil, z0 + 1, 'tower');
+        collision.addBox(x0 + 1, floor, z1 - 1, x1 - 1, ceil, z1, 'tower');
+        room = { floor, ceil, x0: x0 + 1, x1: x1 - 1, z0: z0 + 1, z1: z1 - 1 };
+      } else addSeg('box', x, y, z, cw, top - y, cd, st);
       if (s < n - 1) {
         addSeg('box', x, top - 2.5, z, cw * 1.035 + 0.6, 2.5, cd * 1.035 + 0.6, [st[0], 0, 0.6, 4], false);
         cw *= rng.range(0.66, 0.84);
@@ -70,7 +86,7 @@ export function generateCity(collision, reservedFn) {
       }
     }
     beacons.push([x + cw / 2, y, z + cd / 2], [x - cw / 2, y, z - cd / 2]);
-    return { top: y, w: cw, d: cd };
+    return { top: y, w: cw, d: cd, room };
   };
 
   const roundTower = (x, z, dia, H, core) => {
@@ -222,8 +238,8 @@ export function generateCity(collision, reservedFn) {
       if (deckCells.has(key)) {
         const w = rng.range(64, 82), d = rng.range(64, 82);
         const H = rng.range(150, 480);
-        const t = steppedTower(cx, cz, w, d, H, core, { segments: rng.int(1, 2), flatTop: true });
-        decks.push({ name: DECK_NAMES[deckIndex++], x: cx, z: cz, y: t.top, w: t.w, d: t.d });
+        const t = steppedTower(cx, cz, w, d, H, core, { segments: rng.int(1, 2), flatTop: true, hollow: VENUE_H });
+        decks.push({ name: DECK_NAMES[deckIndex++], x: cx, z: cz, y: t.top, w: t.w, d: t.d, room: t.room });
         continue;
       }
 

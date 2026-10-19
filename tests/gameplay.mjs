@@ -578,36 +578,63 @@ check('honking at a patrol starts a chase', r.taunted && r.one.wanted && r.one.s
 check('a long chase raises the wanted level and brings more patrols', r.two.stars === 2 && r.two.pursuers === 2, JSON.stringify(r.two));
 check('ramming a patrol makes you wanted at two stars', r.rammed.wanted && r.rammed.stars >= 2, JSON.stringify(r.rammed));
 
-// 29. Inside buildings: a deck's lift leads down into its venue and back out;
-// dress codes are enforced.
+// 29. Inside buildings: a deck's glass lift rides down into the venue in the
+// storey below its roof, and back up; dress codes are enforced at the lift.
 r = await ev(() => {
   const g = window.__game;
   // Land on the East Pad first.
   if (g.mode === 'fly') { g.G.speeder.pos.set(132, 301, 0); g.G.speeder.vel.set(0, 0, 0); g.G.speeder.speed = 0; g.step(1); g.setMode('walk'); }
-  const it = g.interactables.find((i) => i.action === 'enter' && i.data.interior === 'club');
-  g.G.walker.place(it.pos.x, it.pos.y, it.pos.z, 0);
   g.state.credits = 5000;
   g.state.wardrobe = undefined;
   g.dress();
-  g.doAction('enter', it.data);
-  return it.data;
+  const club = g.G.city.decks.find((d) => g.interactables.some((i) => i.action === 'lift-down' && i.data.deck === d.name && i.data.theme === 'club'));
+  const down = g.interactables.find((i) => i.action === 'lift-down' && i.data.deck === club.name);
+  g.G.walker.place(down.pos.x, down.pos.y, down.pos.z, 0);
+  g.step(2);
+  const prompt = g.nearest() && g.nearest().action;
+  g.doAction('lift-down', down.data);
+  g.step(150);
+  const w = g.G.walker.pos;
+  const inside = { prompt, y: w.y, roof: club.y, floor: club.room.floor, room: g.room && g.room.name, credits: g.state.credits, light: g.G.indoorLight.intensity };
+  // Walk around the hall: the floor holds you, the walls stop you.
+  g.input.keys.add('KeyW');
+  g.step(90);
+  g.input.keys.delete('KeyW');
+  g.step(10);
+  const walked = { y: g.G.walker.pos.y, z: g.G.walker.pos.z, inRoom: !!g.room };
+  // Back up.
+  const up = g.interactables.find((i) => i.action === 'lift-up' && i.data.deck === club.name);
+  g.G.walker.place(up.pos.x, up.pos.y, up.pos.z, 0);
+  g.step(2);
+  g.doAction('lift-up', up.data);
+  g.step(150);
+  const back = { y: g.G.walker.pos.y, room: g.room, light: g.G.indoorLight.intensity };
+  // The noble salon's lift will not take a courier jacket down.
+  const noble = g.interactables.find((i) => i.action === 'lift-down' && i.data.theme === 'noble');
+  g.G.walker.place(noble.pos.x, noble.pos.y, noble.pos.z, 0);
+  g.step(2);
+  g.doAction('lift-down', noble.data);
+  g.step(150);
+  const refused = Math.abs(g.G.walker.pos.y - noble.pos.y) < 0.6 && !g.room;
+  return { inside, walked, back, refused, roof: club.y };
 });
-await page.waitForTimeout(1600);
-let inside = await ev(() => ({ inside: window.__game.state.inside && window.__game.state.inside.id, y: window.__game.G.walker.pos.y, credits: window.__game.state.credits, near: window.__game.nearest() && window.__game.nearest().action }));
-check('a deck lift takes you inside its venue (cover charge paid)', inside.inside === 'club' && inside.y < -700 && inside.credits === 4980, JSON.stringify(inside));
-await ev(() => window.__game.doAction('leave'));
-await page.waitForTimeout(1600);
-r = await ev((back) => ({ inside: window.__game.state.inside, pos: window.__game.G.walker.pos.toArray(), back }), r.back);
-check('leaving puts you back on the deck', !r.inside && Math.abs(r.pos[1] - r.back[1]) < 0.6 && Math.hypot(r.pos[0] - r.back[0], r.pos[2] - r.back[2]) < 1, JSON.stringify(r));
+check('a deck lift rides down into the venue under its roof (cover charge paid)', r.inside.prompt === 'lift-down' && Math.abs(r.inside.y - r.inside.floor) < 0.6 && r.inside.room && r.inside.credits === 4980 && r.inside.light > 0, JSON.stringify(r.inside));
+check('the venue is a real storey you walk around in', Math.abs(r.walked.y - r.inside.floor) < 0.6 && r.walked.inRoom, JSON.stringify(r.walked));
+check('the lift rides back up to the roof', Math.abs(r.back.y - r.roof) < 0.6 && !r.back.room && r.back.light === 0, JSON.stringify(r.back));
+check('the noble salon lift turns away a courier jacket', r.refused, '');
 r = await ev(() => {
   const g = window.__game;
-  const it = g.interactables.find((i) => i.action === 'enter' && i.data.interior === 'noble');
-  g.doAction('enter', it.data);
-  return it.data.venue;
+  // Walk in through Threads' open door from the market floor.
+  g.G.walker.place(50.5, 160, 38, 0);
+  g.G.rig.yaw = 0;
+  g.step(2);
+  g.input.keys.add('KeyW');
+  g.step(150);
+  g.input.keys.delete('KeyW');
+  g.step(5);
+  return { room: g.room && g.room.id, pos: g.G.walker.pos.toArray() };
 });
-await page.waitForTimeout(1600);
-r = await ev(() => ({ inside: window.__game.state.inside }));
-check('the noble salon turns away a courier jacket', !r.inside, JSON.stringify(r));
+check('walk into Threads through its door', r.room === 'boutique', JSON.stringify(r));
 
 // 30. Clothes change how you play: runner suit, jump pack.
 r = await ev(() => {

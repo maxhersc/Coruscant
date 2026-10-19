@@ -126,7 +126,7 @@ export function crime(kind, { player, flyers, flying, hooks }) {
 
 // player: where you are; flying: in the speeder; speed: its speed;
 // flyers: every craft (police among them); hooks: { alert, escalate, lost, stop, stun, ram }.
-export function updatePolice(dt, { player, flying, speed, flyers, hooks }) {
+export function updatePolice(dt, { player, flying, speed, flyers, hooks, indoors = false }) {
   const p = police;
   updateBolts(dt, player, flying, hooks);
   if (p.stopped) return;
@@ -191,7 +191,8 @@ export function updatePolice(dt, { player, flying, speed, flyers, hooks }) {
   if (d < ESCAPE_R * 0.8) p.engaged = true;
   // A patrol still on its way cannot be lost; ones on your tail can, by
   // distance, by the clouds, or by putting towers between you.
-  const escaping = p.engaged && (d > ESCAPE_R || player.y < BELOW || (!los && d > 90));
+  // Inside a building they cannot see you or reach you.
+  const escaping = p.engaged && (indoors || d > ESCAPE_R || player.y < BELOW || (!los && d > 90));
   const need = 4 + p.stars * 2;
   p.lost = escaping ? p.lost + dt : Math.max(0, p.lost - dt * 0.5);
   p.need = need;
@@ -212,7 +213,7 @@ export function updatePolice(dt, { player, flying, speed, flyers, hooks }) {
     hooks.ram(closest);
   }
   const reach = flying ? 14 : 30;
-  p.close = d < reach ? p.close + dt : Math.max(0, p.close - dt);
+  p.close = d < reach && !indoors ? p.close + dt : Math.max(0, p.close - dt);
   if (p.close > (flying ? 1.6 : 0.4)) {
     p.stopped = true;
     hooks.stop();
